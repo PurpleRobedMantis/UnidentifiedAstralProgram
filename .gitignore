@@ -1,0 +1,56 @@
+# What stays out of a public repository.
+# Everything listed here is either generated, machine-specific, or private working notes.
+
+# Dependencies (restored with `npm install`; three.js ships in vendor/ already)
+node_modules/
+
+# Built copies made from this folder: play copy, public beta, itch.io zips (tools/release.js)
+builds/
+*.zip
+
+# Test stills and capture drivers (tools/shot.js output)
+shots/
+
+# Development working notes: process, open work and local setup, not for the public
+CLAUDE.md
+docs/HANDOFF.md
+docs/TODO.md
+docs/SCENES.md
+docs/CODE_MAP.md
+docs/CAPTIONS.md
+docs/*AUDIT*.md
+docs/PLAYER_FEEDBACK.md
+docs/DECISIONS.md
+docs/RELEASE_CHECKLIST.md
+docs/SCRIBBLE.MD
+docs/MASTER_PLAN.md
+docs/spare-sounds/
+play-fast.bat
+tools/private-words.txt
+
+# Design scratch files
+jester_faces/
+_jester_preview.html
+
+# Local editor / assistant tooling
+.claude/
+.codex/
+.agents/
+AGENTS.md
+[Cc][Oo][Dd][Ee][Xx].md
+.vscode/
+.idea/
+
+# Logs and OS clutter
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backups and scratch files
+*.bak
+*.orig
+*.tmp
+*.stackdump
+*~

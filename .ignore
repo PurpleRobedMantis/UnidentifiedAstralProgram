@@ -1,0 +1,3 @@
+# keep ripgrep / search tools to the working copy: builds/ holds generated copies of the game
+builds/
+node_modules/

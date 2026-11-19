@@ -1,0 +1,22 @@
+{
+  "name": "unidentified-astral-program",
+  "version": "1.0.0",
+  "description": "A first-person three.js browser game that plays one night of contact as experiencers describe it, built from documented accounts.",
+  "private": true,
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["game", "browser-game", "threejs", "webgl", "first-person", "uap", "experiencers", "sleep-paralysis", "folklore"],
+  "author": "PurpleRobedMantis",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "three": "^0.160.0"
+  }
+}
