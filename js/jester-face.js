@@ -113,7 +113,10 @@ vec3 faceDraw(vec3 col, vec2 q, vec4 jb, float t, float aa){
     float rings = step(0.5, fract(r*2.5 - t*0.8));
     float flower = step(r, 0.25 + 0.55*petals);
     float v = mix(rings, 1.0 - rings, flower);
-    v = mix(v, 0.0, fillAA(r - 0.12, aa/er));          // a black centre
+    // the pupil (build 146, smaller): a small black centre in a thin white ring, so the rings moving out from the middle
+    // no longer swell the centre into a black disc up to a quarter of the eye across (it was 0.12 to about 0.24)
+    v = mix(v, 1.0, fillAA(r - 0.17, aa/er));
+    v = mix(v, 0.0, fillAA(r - 0.09, aa/er));
     c = mix(c, vec3(v), fillAA(dE, aa));
   }
   // the mouth: a wide grin of long interlocking fangs, top row hanging down, bottom row standing up between them, inside

@@ -34,7 +34,21 @@ export async function mandala() {
   const portal = makePortal(); portal.group.scale.setScalar(0.001); portal.group.visible = false; g.add(portal.group); warm(portal.group);
   // the developer menu can also start at the flower opening: the jester hall is skipped
   const skipHall = !!E.devFlower; E.devFlower = false;
-  if (skipHall) { mu.uGrow.value = 1.15; setView(0, 1.6, 0, 0, 0.05); fade(0, 2); }
+  // one clock for the flower from the first moment of the melt to the snatch (build 146): its edge spreads, the flower
+  // itself swells and it turns, all on one curve that only slows to a stop 10 s in, long after the palace is gone. It used
+  // to ease to a dead stop just as the palace finished burning, sit still, then start again with the chrysanthemum.
+  const FLOWER_T = 10;
+  let fs = 0, growing = false;
+  const sm = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+  const offGrow = on((dt) => {
+    if (!growing) return;
+    fs += dt;
+    const u = Math.min(1, fs / FLOWER_T), f = 1 - (1 - u) * (1 - u);
+    mu.uGrow.value = 1.5 * f; mu.uZoom.value = 0.55 + 0.45 * f;
+    // turning: from the slow drift it opens with, up through the opening, then settling to a slow turn that never stops
+    mu.uRot.value += dt * (0.05 + 0.07 * sm(fs / 4) - 0.08 * sm((fs - 8) / 6));
+  });
+  if (skipHall) { fs = 5; growing = true; setView(0, 1.6, 0, 0, 0.05); fade(0, 2); }
   else {
   note('carrier');
   await wait(0.6);   // the dark before the palace is kept short: 5 s in all
@@ -141,9 +155,10 @@ export async function mandala() {
   const burn = A.drone(2000, { noise: true, g: 0.12, q: 1 });
   // the film burns: palace and faces char from the inside out, and at the hall's vanishing point a seed of colour opens
   // the flower is already alive behind the palace: turning and flowing while the film burns off it
-  const flowBurn = on((dt) => { mu.uT.value += dt; mu.uRot.value += dt * 0.05; });
+  const flowBurn = on((dt) => { mu.uT.value += dt; });
+  growing = true;   // the flower's one clock starts with the melt (offGrow above) and runs on through the chrysanthemum
   await tween(5.0, (k) => {
-    pu.uBurn.value = k; mu.uGrow.value = 1.15 * Math.pow(k, 0.7);   // the flower is nearly full grown by the time the palace has burnt away
+    pu.uBurn.value = k;
     jesters.forEach((j) => { j.material.uniforms.uBurn.value = k; });
   });
   burn.stop(0.4); flowBurn(); clearJesters(); offPalace(); discard(hall);
@@ -161,8 +176,6 @@ export async function mandala() {
   const offFlower = on((dt) => { mu.uT.value += dt; placePortal(); portal.tick(dt); });
   const chord = [A.drone(220, { g: 0.04 }), A.drone(277.2, { g: 0.03 }), A.drone(329.6, { g: 0.03 })];
   carrier.set(1000, 0.03, 5); G.fear = Math.max(0.1, G.fear - 0.3); E.heart = false;   // no heartbeat in the mandala
-  const rot0 = mu.uRot.value;
-  tween(5, (k) => { mu.uGrow.value = 1.15 + k * 0.35; mu.uRot.value = rot0 + k * 0.6; });
   note('mandala');
   await say('Colour, at last. A flower of it, turning, growing.');
   await say('“I know this place... Yes! I\'ve made it!”', 'self');
@@ -218,7 +231,7 @@ export async function mandala() {
   });
   E.shake = 0.05;
   chord.forEach((c) => c.stop(0.05)); carrier.stop(0.05); low.stop(0.05);
-  offFlower(); offMantis(); discard(g);
+  offFlower(); offGrow(); offMantis(); discard(g);
   flash('#efe6ff', 1.3); E.shake = 0;   // the flower goes out in a pale bloom that drains into the dark
 
   }

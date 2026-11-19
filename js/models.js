@@ -639,13 +639,15 @@ export function gripGrey(g, side, k = 1, obj) {
     // thumb and the first finger; the fingers close round it from one side and the thumb from the other. GRIP_AXIS is the
     // shaft's forward direction in the hand's frame; the grip point sits on the palm side, under the finger bases.
     const hd = R ? u.handR : u.handL; hd.add(obj); u[R ? 'heldR' : 'heldL'] = obj;
-    obj.quaternion.setFromUnitVectors(_down, GRIP_AXIS);
+    // obj.userData.gripAxis: a shaft held at another angle across the palm (build 146: the exam probe, held diagonally)
+    const ax = obj.userData.gripAxis || GRIP_AXIS;
+    obj.quaternion.setFromUnitVectors(_down, ax);
     // obj.userData.gripAt: the point along the object's own y axis that sits in the fist (default GRIP_BACK, made for the wand,
     // whose origin is its middle); scaled by the object's own scale. Build 125: the probe's origin is its ring end, so the
     // wand's offset put it 6-10 cm out past the fingers and the fist held air
     const at = obj.userData.gripAt !== undefined ? obj.userData.gripAt : GRIP_BACK;
-    obj.position.set(-s * GRIP_C[0], GRIP_C[1], GRIP_C[2]).addScaledVector(GRIP_AXIS, at * obj.scale.y);
-    u[R ? 'gripAxisR' : 'gripAxisL'] = s > 0 ? GRIP_AXIS : GRIP_AXIS_L;
+    obj.position.set(-s * GRIP_C[0], GRIP_C[1], GRIP_C[2]).addScaledVector(ax, at * obj.scale.y);
+    u[R ? 'gripAxisR' : 'gripAxisL'] = obj.userData.gripAxis || (s > 0 ? GRIP_AXIS : GRIP_AXIS_L);
     gripGrey(g, side, k);   // closed round it before it is ever seen
   }
 }

@@ -632,6 +632,7 @@ uniform float uLight;
 uniform float uQ;
 uniform float uFade;
 uniform float uRot;
+uniform float uZoom;
 varying vec2 vP;
 varying float vR;
 ${COMMON}
@@ -639,6 +640,8 @@ ${FLOWER}
 void main(){
   vec2 p = vP;
   float r0 = length(p)/vR;
+  // uZoom scales the flower itself (below 1 it is smaller), not the growing edge: it swells as it opens (build 146)
+  p /= uZoom;
   if (r0 > uGrow) {
     gl_FragColor = vec4(0.0);
     return;
@@ -853,7 +856,7 @@ export const fxQuality = { value: 1 };
 export function makeMandala(size) {
   const full = !size;
   const m = new THREE.Mesh(plane(), new THREE.ShaderMaterial({
-    uniforms: { uT: { value: 0 }, uGrow: { value: 0 }, uLight: { value: 0 }, uQ: fxQuality, uFade: { value: 1 }, uRot: { value: 0 }, uScreen: { value: full ? 1 : 0 } },
+    uniforms: { uT: { value: 0 }, uGrow: { value: 0 }, uLight: { value: 0 }, uQ: fxQuality, uFade: { value: 1 }, uRot: { value: 0 }, uZoom: { value: 1 }, uScreen: { value: full ? 1 : 0 } },
     vertexShader: VS_MANDALA, fragmentShader: MANDALA_FRAG, transparent: true, depthWrite: false,
   }));
   if (full) { m.frustumCulled = false; m.renderOrder = -5; } else m.scale.set(size, size, 1);

@@ -2,7 +2,7 @@
 
 **Play it in your browser: https://purplerobedmantis.itch.io/unidentified-astral-program** (public beta)
 
-A first-person 3D browser game, about 25 minutes long, that plays through one night of contact as people who call themselves "experiencers" describe it: waking paralysed at 3 a.m., figures in the bedroom, the white room, the robed mantis, the classroom, the checkered hall of jesters and the mandala. Every scene, line and mechanic is built from documented accounts: the abduction literature (Hopkins, Jacobs, Mack, Bullard and others), sleep-paralysis and out-of-body research, published DMT studies, Robert Monroe's out-of-body work and the declassified US Army Gateway report, and first-person posts on Reddit. The in-game field notes say where each piece comes from. The game has no combat; your body is the controller, and what you remember depends on whether you fight.
+A first-person 3D browser game, about 15 minutes (in current iteration), that plays through one night of contact as people who call themselves "experiencers" describe it: waking paralysed at 3 a.m., figures in the bedroom, the white room, the robed mantis, the classroom, the checkered hall of jesters and the mandala. Every scene, line and mechanic is built from documented accounts: the abduction literature (Hopkins, Jacobs, Mack, Bullard and others), sleep-paralysis and out-of-body research, published DMT studies, Robert Monroe's out-of-body work and the declassified US Army Gateway report, and first-person posts on Reddit. The in-game field notes say where each piece comes from. The game has no combat; your body is the controller, and what you remember depends on whether you fight.
 
 ## Content warning
 

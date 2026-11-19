@@ -1,6 +1,6 @@
 # Unidentified Astral Program: game design
 
-A first-person 3D browser game, about 25 minutes per run, that plays through one night of contact as experiencers describe it. Every scene, line and mechanic is traced to a reported account in [RESEARCH.md](RESEARCH.md).
+A first-person 3D browser game, about 15 minutes (in current iteration), that plays through one night of contact as experiencers describe it. Every scene, line and mechanic is traced to a reported account in [RESEARCH.md](RESEARCH.md).
 
 ## Pillars
 

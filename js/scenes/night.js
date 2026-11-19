@@ -2,7 +2,7 @@
 import { THREE, lookToward, E, G, $, on, wait, until, tween, lerp, say, prompt, hint, bar, fade, note, nights,
   setView, moveView, lookingAt, angleTo, aimAt, clearScene, discard, warm, t as tr } from '../engine.js';
 import { A } from '../audio.js';
-import { T, buildBedroom, makeGrey, stepGrey, makeMantis, idleMantis, makeHuman, makePlayerBody, aimGrey, idleGrey, holdGrey, gripGrey, pointGrey, makeWand, clearGreyArm, GREY_GAIT, heldSegment } from '../models.js';
+import { T, buildBedroom, makeGrey, stepGrey, makeMantis, idleMantis, makeHuman, makePlayerBody, aimGrey, idleGrey, holdGrey, gripGrey, pointGrey, makeWand, clearGreyArm, greyArmHits, GREY_GAIT, heldSegment } from '../models.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const GRIP_K = 1; // a grey's fingers fully closed round the wand
@@ -729,7 +729,7 @@ void main() {
   col = mix(col, col * 0.55, seg * smoothstep(0.4, 0.9, r));
   col += vec3(0.9, 1.0, 1.0) * smoothstep(0.25, 0.0, r);
   col *= smoothstep(1.0, 0.85, r) * 0.7 + 0.3;
-  col = mix(col, vec3(0.35, 1.0, 0.55) * dot(col, vec3(0.45, 0.45, 0.3)) * 1.6, uShift);   // reading you: a cold green
+  col = mix(col, vec3(1.0, 0.52, 0.12) * dot(col, vec3(0.45, 0.45, 0.3)) * 1.7, uShift);   // reading you: a hot orange (build 146; was green)
   gl_FragColor = vec4(col, 1.0);
 }`;
 const EYE_BEAM = `
@@ -739,7 +739,7 @@ void main() {
   float lines = pow(0.5 + 0.5 * sin(v * 60.0 + uTime * 9.0), 6.0);
   float edge = 0.6 + 0.4 * sin(vUv.x * 6.2831853 * 24.0);
   float a = (v * v * 0.3 + lines * 0.2 * v) * edge;
-  gl_FragColor = vec4(mix(vec3(0.4, 0.8, 1.0), vec3(0.4, 1.0, 0.6), uShift) * a, 1.0);
+  gl_FragColor = vec4(mix(vec3(0.4, 0.8, 1.0), vec3(1.0, 0.58, 0.18), uShift) * a, 1.0);
 }`;
 
 function roundedRect(w, h, r) {
@@ -1080,13 +1080,15 @@ export async function exam() {
   const chrome = new THREE.MeshStandardMaterial({ color: 0xeef2f6, metalness: 0.85, roughness: 0.14 });
   const instr = new THREE.Group();
   {
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0068, 0.43, 10), chrome); rod.position.y = -0.135; instr.add(rod);
-    const nub = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 12, 8), new THREE.MeshBasicMaterial({ color: 0xd8f2ff })); nub.position.y = -0.35; instr.add(nub);   // a pale lit tip
+    // 0.70 m from the ring end to the tip (build 146, was 0.43): long enough to come in under your raised legs to your
+    // backside from the foot of the table with the grey's elbow bent; on the tray it lies across the whole plate
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0068, 0.70, 10), chrome); rod.position.y = -0.27; instr.add(rod);
+    const nub = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 12, 8), new THREE.MeshBasicMaterial({ color: 0xd8f2ff })); nub.position.y = -0.62; instr.add(nub);   // a pale lit tip
     for (const y of [0.06, 0.04, 0.02]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.0078, 0.0018, 4, 12), chrome); r.rotation.x = Math.PI / 2; r.position.y = y; instr.add(r); }
   }
   // it lies with its ringed handle out past the end of the tray (build 125), so a hand can close round the handle without
-  // its fingers going through the plate (the handle, probe y 0.02-0.06, is at tray x -0.30 to -0.34; the plate ends at -0.26)
-  instr.position.set(-0.28, 0.8215, 0); instr.rotation.set(0, 0, Math.PI / 2); tray.add(instr);
+  // its fingers going through the plate (the handle, probe y 0.02-0.06, is at tray x -0.35 to -0.39; the plate ends at -0.26: 5 cm further out since build 146, when the diagonal grip turned the fingertips over the plate end)
+  instr.position.set(-0.33, 0.8215, 0); instr.rotation.set(0, 0, Math.PI / 2); tray.add(instr);
   const other = makeHuman(1, 0x6a7384); other.rotation.x = -Math.PI / 2; other.position.set(2.3, 1.05 + TY, 1.0); g.add(other);
   // lay him on the slab: drop him until his lowest point rests on the top (it was set by eye and floated)
   { other.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(other); other.position.y += 0.877 + TY - TD - bb.min.y; }
@@ -1161,8 +1163,8 @@ export async function exam() {
       }, (k) => k);
       eyeAt(to.x, to.y, to.z); }
     await wait(0.5);
-    // it reads you: the lens and beam go a cold green, then back to blue
-    A.scanLock(); ED.blinkM.color.setHex(0x66ff99);
+    // it reads you: the lens and beam go orange, then back to blue
+    A.scanLock(); ED.blinkM.color.setHex(0xffa040);
     await tween(0.12, (k) => { ED.shift.value = k; });
     await wait(0.75);
     await tween(0.3, (k) => { ED.shift.value = 1 - k; });
@@ -1238,9 +1240,21 @@ export async function exam() {
     const tv = V(0, 0, 0), tq = new THREE.Quaternion(), hand = V(0, 0, 0), aimP = V(0, 0, 0);
     const GA = V(0, -0.25, 1).normalize();   // the probe's axis in the hand's frame (gripGrey's baton grip)
     const local = (a, x, y, z, out) => { a.updateWorldMatrix(true, false); return a.localToWorld(out.set(x, y, z)); };
-    const tip = () => instr.localToWorld(aimP.set(0, -0.32, 0));
+    const tip = () => instr.localToWorld(aimP.set(0, -0.59, 0));
     // turn gP's right wrist so the probe's axis points along dir (world)
-    const wristTo = (dir) => { const hd = uP.handR; tv.copy(dir).normalize(); hd.parent.getWorldQuaternion(tq).invert(); tv.applyQuaternion(tq); hd.quaternion.setFromUnitVectors(uP.gripAxisR || GA, tv); };
+    // Build 146: the hand first rolls about the forearm (as a forearm turns, up to 135 degrees either way) to bring the shaft
+    // round to the side it must point, and only bends at the wrist for what is left. It used to take the shortest turn, all
+    // of it a bend: the wrist sat cocked back 75-99 degrees the whole time it held the probe.
+    const twQ = new THREE.Quaternion(), twA = V(0, 0, 0), twY = V(0, 1, 0); let twLast = 0;
+    const wristTo = (dir) => {
+      const hd = uP.handR, ga = uP.gripAxisR || GA; tv.copy(dir).normalize(); hd.parent.getWorldQuaternion(tq).invert(); tv.applyQuaternion(tq);
+      // the turn nearest last frame's (no flip from one side to the other when the shaft points straight back)
+      let ph = Math.atan2(tv.x, tv.z) - Math.atan2(ga.x, ga.z); ph = twLast + Math.atan2(Math.sin(ph - twLast), Math.cos(ph - twLast));
+      if (Math.hypot(tv.x, tv.z) < 0.05) ph = twLast;   // along the forearm: no side to turn toward
+      ph = Math.max(-2.4, Math.min(2.4, ph)); twLast = ph;
+      twQ.setFromAxisAngle(twY, ph); twA.copy(ga).applyQuaternion(twQ);
+      hd.quaternion.setFromUnitVectors(twA, tv).multiply(twQ);
+    };
     // walk a grey through some points, facing where it goes, then turn to endR. post() runs after the step every frame
     // the stride eases in over the first 0.4 s (it started at full stride in one frame: the body and anything carried jumped)
     const walkPath = async (a, pts, endR, look, post) => {
@@ -1270,12 +1284,14 @@ export async function exam() {
     // part of the arm for collision), and corrects the wrist by where the fingertips land with the hand unturned, as
     // pointGrey's reach did. dir: the shaft's world direction, a function (handPos, out) => direction, or null for a flat hand.
     const fW = V(0, 0, 0), fT = V(0, 0, 0), fP = V(0, 0, 0), fA = V(0, 0, 0), fB = V(0, 0, 0), fD = V(0, 0, 0), fPole = V(0, 0, 0), fQ = new THREE.Quaternion();
-    let fLive = false;
+    let fLive = false, armPrev = null, armBase = null, armT = -1, armDt = 1 / 30;
     const fQ2 = new THREE.Quaternion();
     const fistTo = (fist, dir, w = 1) => {   // w < 1 turns the hand only part of the way from straight
       const hd = uP.handR;
       if (window.UAP) window.UAP.fist = fist;   // for test harnesses
-      if (!fLive) { gP.updateMatrixWorld(true); hd.getWorldPosition(fW); fLive = true; }
+      if (!fLive) { gP.updateMatrixWorld(true); hd.getWorldPosition(fW); fLive = true; armPrev = armBase = null; armT = -1; }
+      // the arm as it was at the end of the last frame (fistTo runs several times a frame)
+      if (E.time !== armT) { if (armPrev) { armBase = armBase || [new THREE.Quaternion(), new THREE.Quaternion()]; armBase[0].copy(armPrev[0]); armBase[1].copy(armPrev[1]); } armDt = armT < 0 ? 1 / 30 : E.time - armT; armT = E.time; }
       gP.updateMatrixWorld(true); fPole.set(1, -0.35, -0.55).normalize().applyQuaternion(uP.root.getWorldQuaternion(fQ));
       const orient = () => {
         if (!dir) hd.quaternion.identity();
@@ -1286,7 +1302,12 @@ export async function exam() {
         clearGreyArm(gP, 'R', fW, fPole, orient);
         hd.quaternion.identity(); gP.updateMatrixWorld(true); uP.tipsR.getWorldPosition(fT); fW.addScaledVector(fT.subVectors(fist, fT), 0.8);
       }
-      clearGreyArm(gP, 'R', fW, fPole, orient); orient();
+      clearGreyArm(gP, 'R', fW, fPole, orient);
+      // the shoulder and elbow turn at most 2.4 rad a second of game time (0.08 a frame at 30 fps; build 146): when the solver's elbow swings to another side to
+      // keep clear of the body (the waddle twists the chest into the carrying arm), it went 13-15 cm in one frame
+      // (only when the held-back pose is itself clear of the body; otherwise the solver's clear pose stands)
+      if (armBase) { const maxA = Math.max(0.01, 2.4 * armDt), keep = [uP.armR.quaternion.clone(), uP.foreR.quaternion.clone()]; let lim = false; [uP.armR, uP.foreR].forEach((o, i) => { const ang = armBase[i].angleTo(o.quaternion); if (ang > maxA) { lim = true; o.quaternion.copy(armBase[i].clone().slerp(o.quaternion, maxA / ang)); } }); gP.updateMatrixWorld(true); if (lim && greyArmHits(gP, 'R', orient())) { uP.armR.quaternion.copy(keep[0]); uP.foreR.quaternion.copy(keep[1]); gP.updateMatrixWorld(true); } }
+      orient(); armPrev = armPrev || [new THREE.Quaternion(), new THREE.Quaternion()]; armPrev[0].copy(uP.armR.quaternion); armPrev[1].copy(uP.foreR.quaternion);
     };
     const holdAt = (fist, toward) => { fistTo(fist, (h, out) => out.subVectors(toward, h)); gripGrey(gP, 'R', 1); };
     // the two at your legs: a hand under each calf (the one on your left also steadies your knee); legK lifts, handK reaches
@@ -1417,17 +1438,21 @@ export async function exam() {
       aimGrey(gL, watchL ? watchL() : h1, 0.9); aimGrey(gR, watchR ? watchR() : h3, 0.9);
     });
     const spotL = V(-0.6, 0, -0.3), spotR = V(0.6, 0, -0.3);   // level with the middle of your shins while your legs are flat
-    const restW = instr.getWorldPosition(V(0, 0, 0)), grip = local(tray, -0.32, 0.83, 0, V(0, 0, 0)), probeDir = V(1, -0.02, 0);
+    const restW = instr.getWorldPosition(V(0, 0, 0)), grip = local(tray, -0.37, 0.83, 0, V(0, 0, 0)), probeDir = V(1, -0.02, 0);
     // the probe placed by where it lands, not by the fingertips: its ring end (its origin) to world point w, shaft along d;
     // the fist (pa, warm-started) is corrected by where the probe ends up. low: where it lies, lifted clear of the tray
     // in the grey's hand the probe would take on the grey's size (1.38): it grew by a third when picked up and stayed that
     // big on the tray (build 123), so its own scale undoes the grey's
     // and it is held by its ringed grip (probe y 0.02-0.06): models.js gripGrey reads userData.gripAt
     instr.userData.gripAt = 0.04;
+    // held diagonally across the palm, as a hand holds a rod it means to point (build 146): 55 degrees off the forearm, not
+    // the wand's 76, so pointing it ahead does not cock the wrist right back
+    instr.userData.gripAxis = V(0, -0.7, 1).normalize();
     const holdProbe = () => { instr.scale.setScalar(1 / gP.scale.x); gripGrey(gP, 'R', 1, instr); };
     const pa = V(0, 0, 0), pb = V(0, 0, 0), pick = V(0, 0, 0), low = restW.clone().setY(restW.y + 0.03);   // 3 cm: at 2.2 the fingertips under it touched the plate
     const probeTo = (w, d) => { for (let i = 0; i < 3; i++) { fistTo(pa, d); gripGrey(gP, 'R', 1); gP.updateMatrixWorld(true); instr.getWorldPosition(pb); pa.add(pb.subVectors(w, pb)); } aimGrey(gP, restW, 1); };
-    const traySpot = V(-1.03, 0, -0.99), footSpot = V(0, 0, -1.33), footR = 0;   // at the foot of the table, square on, between your feet (9 cm nearer since build 125: holding the probe by its rings puts the tip 9 cm nearer the fist, and the arm was already at full stretch)
+    const traySpot = V(-1.03, 0, -0.99), footSpot = V(0, 0, -1.27), footR = 0;   // at the foot of the table, square on, between your feet (9 cm nearer since build 125: holding the probe by its rings puts the tip 9 cm nearer the fist, and the arm was already at full stretch)
+    const aroundTray = [V(-1.55, 0, -1.1), V(-1.35, 0, -1.85), V(-0.2, 0, -1.7)];   // the tray stand spans x -1.21..-0.69, z -1.40..-1.24
     const mePos = me.position.clone();
     // the fetcher sets off first; the other two come to your legs
     lookToward(V(-0.6, 1.05 + TY, -0.7), 1.6);
@@ -1465,10 +1490,13 @@ export async function exam() {
         // for the fingertip point instead, the arm could settle on another elbow angle, the wrist landed elsewhere and the
         // probe dropped into the tray as the hand closed.
         uP.handR.getWorldQuaternion(pq0);
-        await tween(0.7, (k) => {
-          const e = 1 - k; fv0.copy(tips0).multiplyScalar(e * e).addScaledVector(over, 2 * k * e).addScaledVector(pickW, k * k);
+        // up and over to 15 cm above the grip, the hand turning on the way, then straight down onto it (build 146: on a curve
+        // still coming down sideways, the fingertips went 1 cm into the plate)
+        await tween(0.9, (k) => {
+          if (k < 0.6) { const q = sm2(k / 0.6); fv0.lerpVectors(tips0, over, q); fv0.y += 0.06 * Math.sin(Math.PI * q); } else fv0.lerpVectors(over, pickW, sm2((k - 0.6) / 0.4));
           gP.updateMatrixWorld(true); fPole.set(1, -0.35, -0.55).normalize().applyQuaternion(uP.root.getWorldQuaternion(fQ));
-          const orient = () => { gP.updateMatrixWorld(true); uP.handR.parent.getWorldQuaternion(hpq).invert(); uP.handR.quaternion.copy(hpq.multiply(fQ2.slerpQuaternions(pq0, pickQ, k))); return null; };
+          // turned to the grip by the time it starts down (build 146: still turning at the end, the fingertips dipped 1 cm into the plate)
+          const orient = () => { gP.updateMatrixWorld(true); uP.handR.parent.getWorldQuaternion(hpq).invert(); uP.handR.quaternion.copy(hpq.multiply(fQ2.slerpQuaternions(pq0, pickQ, sm2(k / 0.6)))); return null; };
           clearGreyArm(gP, 'R', fv0, fPole, orient); orient(); gripGrey(gP, 'R', 0.3 * k); aimGrey(gP, grip, k);
         });
         A.tone(3100, 0.05, { g: 0.02 }); A.tone(4300, 0.04, { g: 0.01 });
@@ -1487,27 +1515,38 @@ export async function exam() {
         // from where the lift ends into the carrying pose before it sets off (the walk used to start in the carrying pose:
         // the probe's tip moved 54 cm in one frame)
         { const fA = f0.clone(), tA = t0.clone(), cf2 = V(0, 0, 0), ct2 = V(0, 0, 0), fm = V(0, 0, 0), tm = V(0, 0, 0);
-          await tween(0.7, (k) => { local(uP.root, 0.18, 0.95, 0.24, cf2); local(uP.root, 0.3, 1.9, 0.7, ct2); holdAt(fm.lerpVectors(fA, cf2, k), tm.lerpVectors(tA, ct2, k)); aimGrey(gP, tip(), 1); }); }
+          await tween(0.7, (k) => { local(uP.root, 0.18, 0.95, 0.24, cf2); local(uP.root, 0.3, 1.9, 0.85, ct2); holdAt(fm.lerpVectors(fA, cf2, k), tm.lerpVectors(tA, ct2, k)); aimGrey(gP, tip(), 1); }); }
       })(),
     ]);
     // round the foot of the table, the probe carried upright and out in front
     const cf = V(0, 0, 0), ct = V(0, 0, 0);
-    const carry = () => holdAt(local(uP.root, 0.18, 0.95, 0.24, cf), local(uP.root, 0.3, 1.9, 0.7, ct));   // in its body's frame, so the fist rocks with the waddle instead of the chest rocking into the arm
+    const carry = () => holdAt(local(uP.root, 0.18, 0.95, 0.24, cf), local(uP.root, 0.3, 1.9, 0.85, ct));   // in its body's frame, so the fist rocks with the waddle instead of the chest rocking into the arm
     watchL = watchR = () => tip();
-    await walkPath(gP, [V(-0.8, 0, -1.6), V(-0.15, 0, -1.6), footSpot], footR, () => tip(), carry);
+    // round the far side of the tray (build 146: the straight line from beside it went through its stand, chest through the
+    // plate and post, knees through the post and base)
+    await walkPath(gP, [...aroundTray, footSpot], footR, () => tip(), carry);
     // lines it up and brings it in, slowly, nearly all the way
     say('The third comes round to the foot of the table with a long chrome probe, and lines it up...', 'self', 4.5);
-    // the fist out in front of its right shoulder; the shaft comes down level, pointing up the table to the right of your
-    // legs (clear of the one holding your right leg), then turns in and slides forward under your raised legs, toward you
-    // (pointGrey's reach puts the fingertips at the point; the probe's grip sits about 0.15 below and behind that)
-    const target = V(0, 0.93 + TY, 0.15), fv = V(0, 0, 0), dv = V(0, 0, 0), gw = V(0, 0, 0);   // your backside, square on, along the length of you
-    // HA, H1 are 6 cm to its right of centre (build 124: centred, its forearm crossed its own chest), and 9 cm further in since
-    // build 125, with the grey (the probe sits 9 cm further back in the fist, held by its rings, so the tip comes as near)
-    const HA = V(0.06, 1.24 + TY, -0.91), H1 = V(0.06, 1.14 + TY, -0.65), FWD = V(0, -0.06, 1).normalize(), IN1 = V(0, 0, 0);
-    const swing = (dur, a, b, da, db) => { const A0 = a.clone(), B0 = b.clone(), DA = da.clone(), DB = db.clone();
-      return tween(dur, (k) => { fv.lerpVectors(A0, B0, k); fistTo(fv, dv.lerpVectors(DA, DB, k).normalize()); gripGrey(gP, 'R', 1); aimGrey(gP, tip(), 1); }); };
-    const carryF = () => local(gP, 0.18, 0.95, 0.24, V(0, 0, 0)), carryD = () => local(gP, 0.3, 1.9, 0.7, V(0, 0, 0)).sub(carryF()).normalize();
-    await swing(1.4, carryF(), HA, carryD(), FWD);
+    // Build 146 (owner: "line it up with their ass more and get closer to ass"): your backside is low between your raised legs
+    // (measured: the middle's rearmost point at about y 0.63, z 0.05; the thighs are above y 0.84 from z -0.05 down the table),
+    // so the probe comes in low and level along the table between your legs and stops a few centimetres short of it. It was
+    // held up by your feet, its tip 53 cm short and 25 cm high. It is placed by the probe itself (its ring end to a point, the
+    // shaft along a direction), not by the fingertips. To reach, the grey leans in from the hips with its feet planted (body
+    // turned about the hip, legs turned back), as the bedroom grey does to climb onto the bed.
+    const BS = V(0, 0.63, 0.05), PL = 0.62;   // your backside; the probe's ring end to its tip
+    const D1 = V(0, 0.03, 1).normalize(), DA = V(0, -0.1, 1).normalize();
+    const O1 = BS.clone().addScaledVector(D1, -(0.07 + PL));   // the tip 7 cm short of you
+    const OA = O1.clone().add(V(0, 0.12, -0.14));                // lined up first, a little higher and further back
+    const LEAN_A = 0.35, LEAN_1 = 0.65;
+    const fv = V(0, 0, 0), OV = V(0, 0, 0), DV = V(0, 0, 0);
+    let leanK = 0; const leg0R = uP.legR.rotation.x, leg0L = uP.legL.rotation.x;
+    const lean = (L) => { leanK = L; uP.root.rotation.set(L, 0, 0); uP.root.position.set(0, 0.36 - 0.36 * Math.cos(L), -0.36 * Math.sin(L)); uP.legR.rotation.x = leg0R - L; uP.legL.rotation.x = leg0L - L; };
+    // aimGrey aims in the upright frame: take the lean off the neck
+    const look = (pt, k = 1) => { aimGrey(gP, pt, k); uP.neck.rotation.x -= leanK * k; };
+    const lineTo = (o, d) => { for (let i = 0; i < 3; i++) { fistTo(pa, d); gripGrey(gP, 'R', 1); gP.updateMatrixWorld(true); instr.getWorldPosition(pb); pa.add(pb.subVectors(o, pb)); } };
+    // from carrying it upright into line with you, leaning in as it comes down level
+    { gP.updateMatrixWorld(true); uP.tipsR.getWorldPosition(pa); const o0 = instr.getWorldPosition(V(0, 0, 0)), d0 = tip().clone().sub(o0).normalize();
+      await tween(1.4, (k) => { lean(LEAN_A * k); lineTo(OV.lerpVectors(o0, OA, k), DV.lerpVectors(d0, DA, k).normalize()); look(tip()); }); }
     // your heart races while it is near, until the probe is back on the tray
     // and you breathe hard and fast, shakily, in and out
     let hbT = 0, brT = 0.2, inh = true;
@@ -1516,36 +1555,33 @@ export async function exam() {
       brT -= dt; if (brT <= 0) { brT = (inh ? 0.42 : 0.5) + Math.random() * 0.12; A.breath(inh, inh ? 0.4 : 0.48, 0.95); inh = !inh; }
       E.shake = 0.005;
     });
-    await tween(2.8, (k) => {
-      fv.lerpVectors(HA, H1, k);
-      fistTo(fv, (h, out) => { IN1.subVectors(target, h).normalize(); return out.copy(FWD).lerp(IN1, k).normalize(); });   // aimed from the wrist
-      gripGrey(gP, 'R', 1); aimGrey(gP, tip(), 1);
-    });
-    IN1.copy(dv);
+    await tween(2.8, (k) => { lean(lerp(LEAN_A, LEAN_1, k)); lineTo(OV.lerpVectors(OA, O1, k), DV.lerpVectors(DA, D1, k).normalize()); look(tip()); });
     // it stops. A look at the one on the left, at the one on the right, back at the end of the probe; an inch more; no
     await wait(0.7);
     const hU = uP.head;
     watchL = watchR = () => w3.copy(gP.position).setY(1.05);
-    await tween(0.9, (k) => { aimGrey(gP, local(gL, 0, 1.0, 0, w1), k); hU.rotation.z = 0.12 * k; });
+    await tween(0.9, (k) => { aimGrey(gP, local(gL, 0, 1.0, 0, w1), k); uP.neck.rotation.x -= leanK; hU.rotation.z = 0.12 * k; });
     await wait(0.5);
-    await tween(1.0, (k) => { local(gL, 0, 1.0, 0, w1); local(gR, 0, 1.0, 0, w2); aimGrey(gP, w1.lerp(w2, k), 1); hU.rotation.z = 0.12 - 0.26 * k; });
+    await tween(1.0, (k) => { local(gL, 0, 1.0, 0, w1); local(gR, 0, 1.0, 0, w2); look(w1.lerp(w2, k)); hU.rotation.z = 0.12 - 0.26 * k; });
     await wait(0.5);
     watchL = watchR = () => tip();
-    await tween(0.8, (k) => { local(gR, 0, 1.0, 0, w2); aimGrey(gP, w2.lerp(tip(), k), 1); hU.rotation.z = -0.14 * (1 - k); });
-    await tween(0.6, (k) => { fistTo(fv.copy(H1).addScaledVector(IN1, 0.03 * Math.sin(Math.PI * k)), IN1); gripGrey(gP, 'R', 1); aimGrey(gP, tip(), 1); });
+    await tween(0.8, (k) => { local(gR, 0, 1.0, 0, w2); look(w2.lerp(tip(), k)); hU.rotation.z = -0.14 * (1 - k); });
+    // an inch more: the tip to 3.5 cm from you, and back
+    await tween(0.6, (k) => { lineTo(OV.copy(O1).addScaledVector(D1, 0.035 * Math.sin(Math.PI * k)), D1); look(tip()); });
     await wait(0.6);
     say('...They stop, consider the matter at some length, and think better of it. The probe goes back on the tray.', 'self', 6);
-    await tween(0.9, (k) => { hU.rotation.z = 0.1 * Math.sin(Math.PI * k); aimGrey(gP, tip(), 1); });
+    await tween(0.9, (k) => { hU.rotation.z = 0.1 * Math.sin(Math.PI * k); look(tip()); });
     hU.rotation.z = 0;
     // withdraw, probe back upright; your legs come down; it goes back round to the tray
-    await swing(1.4, H1, HA, IN1, FWD);
+    await tween(1.4, (k) => { lean(lerp(LEAN_1, LEAN_A, k)); lineTo(OV.lerpVectors(O1, OA, k), DV.lerpVectors(D1, DA, k).normalize()); look(tip()); });
     // into the carrying pose, the shaft aimed from the wrist the way the carry aims it (aimed from the fist, it snapped 7 cm
     // as the walk began)
-    { const cf3 = V(0, 0, 0), ct3 = V(0, 0, 0), d3 = V(0, 0, 0), lk3 = V(0, 0, 0);
-      await tween(1.1, (k) => { local(uP.root, 0.18, 0.95, 0.24, cf3); local(uP.root, 0.3, 1.9, 0.7, ct3); aimGrey(gP, lk3.lerpVectors(tip(), restW, k), 1 - 0.2 * k); fistTo(fv.lerpVectors(HA, cf3, k), (h, out) => out.copy(FWD).lerp(d3.subVectors(ct3, h).normalize(), k).normalize()); gripGrey(gP, 'R', 1); }); }   // its eyes move to the tray as it goes (the walk looks there: the head snapped, and the arm, kept clear of the head, jumped with it)
+    { const cf3 = V(0, 0, 0), ct3 = V(0, 0, 0), d3 = V(0, 0, 0), lk3 = V(0, 0, 0), pA = pa.clone();
+      await tween(1.1, (k) => { lean(LEAN_A * (1 - k)); local(uP.root, 0.18, 0.95, 0.24, cf3); local(uP.root, 0.3, 1.9, 0.85, ct3); look(lk3.lerpVectors(tip(), restW, k), 1 - 0.2 * k); fistTo(fv.lerpVectors(pA, cf3, k), (h, out) => out.copy(DA).lerp(d3.subVectors(ct3, h).normalize(), k).normalize()); gripGrey(gP, 'R', 1); }); }
+    lean(0);   // its eyes move to the tray as it goes (the walk looks there: the head snapped, and the arm, kept clear of the head, jumped with it)
     const lower = (async () => { await tween(2.0, (k) => { legK = 1 - k; }); await tween(0.6, (k) => { handK = 1 - k; }); holding = false; legs.rotation.x = legs0; ST.set(0, 0); })();
     watchL = watchR = null;
-    await walkPath(gP, [V(-0.15, 0, -1.6), V(-0.8, 0, -1.6), traySpot], Math.PI, () => restW, carry);
+    await walkPath(gP, [...aroundTray.slice().reverse(), traySpot], Math.PI, () => restW, carry);
     await lower;
     moveView(1.4, { pos: cam0, pitch: 0.35 });
     // Down on the tray where it came from (build 123: the hand used to sink to the tray's grip point while the shaft was
@@ -1565,7 +1601,7 @@ export async function exam() {
     // and the fingers open part way as it comes down, so they are not under it at the tray
     await tween(0.6, (k) => { probeTo(want.lerpVectors(above, low, k), probeDir); gripGrey(gP, 'R', 1 - 0.65 * sm2((k - 0.3) / 0.7)); }, (k) => k);
     tray.attach(instr); uP.gripAxisR = null;
-    const fromP = instr.position.clone(), fromQ = instr.quaternion.clone(), restP = V(-0.28, 0.8215, 0), restQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2));
+    const fromP = instr.position.clone(), fromQ = instr.quaternion.clone(), restP = V(-0.33, 0.8215, 0), restQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2));
     await tween(0.35, (k) => { instr.position.lerpVectors(fromP, restP, k); instr.quaternion.slerpQuaternions(fromQ, restQ, k); gripGrey(gP, 'R', 0.35 * (1 - k)); });   // already part open from the lowering
     A.tone(2900, 0.05, { g: 0.02 }); A.tone(3900, 0.04, { g: 0.01 }); pound(); E.shake = 0;
     const up0 = pa.clone(), up1 = pa.clone().setY(pa.y + 0.1);

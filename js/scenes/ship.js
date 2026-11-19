@@ -45,6 +45,9 @@ const glowTex = () => { if (!glowCache) { glowCache = canvasTex(128, 128, (g) =>
 // ---------- shader kit ----------
 // Colours in these shaders are display (sRGB) values: ShaderMaterial output is not converted.
 const dcol = (hex) => new THREE.Color().setHex(hex, THREE.LinearSRGBColorSpace);
+// the child who looks at you in the classroom is the one who holds out the toy in the containers hall (build 146): same
+// size and clothes colour, and makeHuman picks hair, hair style and eye colour from the colour, so it is the same child
+const KNOWN_KID = { scale: 0.55, color: 0x6a7b99 };
 const TIME = { value: 0 };
 const FOGU = { uFogC: { value: new THREE.Color(0) }, uFogN: { value: 1e6 }, uFogF: { value: 2e6 } };
 // call once per scene, after the scene's fog is set (on() callbacks are cleared with the scene)
@@ -804,13 +807,13 @@ async function classroom() {
   // the room is centred on the dais (z = -2.6), so the dais stands in the middle of the floor
   for (const m of [wall, floor, dome, cove]) m.position.z = -2.6;
   g.add(wall, floor, dome, cove, new THREE.HemisphereLight(0xffffff, 0x8a8f9c, 2));
-  const cols = [0x6a7b99, 0x9a6a6a, 0x6a9a7c, 0x8a7a55, 0x7a6a9a, 0x556a7a, 0x9a8a6a];
+  const cols = [KNOWN_KID.color, 0x9a6a6a, 0x6a9a7c, 0x8a7a55, 0x7a6a9a, 0x556a7a, 0x9a8a6a];
   const seatM = std(0xb3a07a, { roughness: 0.9 }), seats = new THREE.InstancedMesh(lathe([[0, 0], [0.2, 0], [0.23, 0.06], [0.23, 0.22], [0.2, 0.28], [0.12, 0.3], [0, 0.3]], 32), seatM, cols.length);
   const dummy = new THREE.Object3D(), kids = [];
   cols.forEach((c, i) => {
     const side = i % 2 ? 1 : -1, k = Math.floor(i / 2), s = 0.55 + (i % 3) * 0.08;
     // seated on low stools in a circle round the dais, open on your side; the nearest (i = 0) faces you and later shows off
-    const th = side * (0.42 + k * 0.42), kid = makeHuman(s, c, { seated: true });
+    const th = side * (0.42 + k * 0.42), kid = makeHuman(i ? s : KNOWN_KID.scale, c, { seated: true });
     kid.position.set(Math.sin(th) * 2.2, 0, -2.6 + Math.cos(th) * 2.2);
     if (i === 0) kid.lookAt(0, 0, 1.3); else kid.lookAt(0, 0, -2.6);
     g.add(kid); kids.push(kid);
@@ -1936,7 +1939,7 @@ async function containers() {
   // low lucidity: look back and the plate says something else
   unsteady(plate, (k, n) => { drawPlate(pTex.image.getContext('2d'), k ? 7 + n * 1013 : 7); pTex.needsUpdate = true; });
   for (const x of [-0.7, 0.7]) { const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.1, 6), pipeM); rod.position.set(x, 3.27, -1.42); g.add(rod); }
-  const child = makeHuman(0.6, 0xcfd6dd); child.position.set(0, 0, -19.5); g.add(child);
+  const child = makeHuman(KNOWN_KID.scale, KNOWN_KID.color); child.position.set(0, 0, -19.5); g.add(child);
   const grey = makeGrey(); grey.position.set(0.8, 0, -19.9); g.add(grey);
   const toy = new THREE.Mesh(new THREE.TetrahedronGeometry(0.09), sm(JEWEL, { uColor: { value: dcol(0xffd27a) }, uGlow: { value: 1.2 } })); toy.position.set(0, 0.72, -19.15); g.add(toy);
   const tl = new THREE.PointLight(0xffc24a, 1.5, 4); toy.add(tl);
@@ -1946,6 +1949,15 @@ async function containers() {
   on(() => { giftNear = giftHeld ? 1 : Math.max(0, 1 - E.camera.position.distanceTo(toy.position) / 14); gift.set(giftNear * giftNear); });
   // the child stands with both arms out, the thing held up in cupped hands; offer 1 = held out, 0 = arms down
   const cu = child.userData, toyHeld = toy.position.clone();
+  // held in the cupped hands: the arms posed held out, the toy 5.5 cm out in front of the middle of the two hands (it was
+  // a fixed point, made for a taller child)
+  {
+    cu.armL.rotation.set(-1.05, 0, 0.19); cu.armR.rotation.set(-1.05, 0, -0.19); cu.foreL.rotation.x = cu.foreR.rotation.x = -0.48;
+    child.updateMatrixWorld(true);
+    const hc = (w) => { const m = w.children.find((c) => c.isMesh); m.geometry.computeBoundingBox(); return m.localToWorld(m.geometry.boundingBox.getCenter(V(0, 0, 0))); };
+    toyHeld.copy(hc(cu.wristL)).add(hc(cu.wristR)).multiplyScalar(0.5).add(V(0, 0, 0.055));
+    toy.position.copy(toyHeld);
+  }
   let offer = 1, toyFollows = true;
   on((dt, t) => {
     const b = Math.sin(t * 1.1) * 0.02;

@@ -54,3 +54,6 @@ desktop.ini
 *.tmp
 *.stackdump
 *~
+
+# Reddit launch post draft (private)
+docs/REDDIT_POST.md
