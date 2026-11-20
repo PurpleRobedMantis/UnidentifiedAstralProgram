@@ -57,3 +57,6 @@ desktop.ini
 
 # Reddit launch post draft (private)
 docs/REDDIT_POST.md
+
+# Blender working files: .blend embeds absolute local paths (the export in js/clips/ and anim/grey-rig.json are what the game and tools use)
+anim/*.blend

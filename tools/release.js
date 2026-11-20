@@ -14,7 +14,7 @@ const MARK = '.uap-release';
 
 const FILES = ['index.html', 'LICENSE', 'README.md', 'server.js', 'start.bat', 'package.json',
   'vendor/three/LICENSE', 'vendor/three/three.module.js', 'docs/RESEARCH.md', 'docs/GAME_DESIGN.md'];
-const DIRS = { js: /\.(js|txt|json)$/, 'js/scenes': /\.js$/, 'js/lang': /\.js$/, img: /\.(jpg|png)$/ };
+const DIRS = { js: /\.(js|txt|json)$/, 'js/scenes': /\.js$/, 'js/clips': /\.js$/, 'js/lang': /\.js$/, img: /\.(jpg|png)$/ };
 const localOnly = /(?:^|\/)(?:\.(?:claude|codex|agents)(?:\/|$)|(?:claude|codex|agents)\.md$)|^docs\/[^/]*audit[^/]*\.md$/i;
 
 if (fs.existsSync(out)) {

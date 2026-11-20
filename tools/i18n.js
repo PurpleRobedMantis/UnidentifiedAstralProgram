@@ -78,8 +78,8 @@ for (const sec of data('js/credits.js', 'CREDITS')) { add(sec.title, 'js/credits
 // the jesters' shouts
 for (const l of read('js/jester-lines.txt').split(/\r?\n/)) add(l, 'js/jester-lines.txt');
 // built strings and words made in code
-for (const s of ['COUNTED', 'RECURRING', 'SINGLE', 'CONTESTED', 'GAME', 'Field note:', 'Not yet witnessed', 'You have been through here.']) add(s, 'built in code');
-for (const s of ['Field notes witnessed: 1 / 2.', 'W A S D to walk, SHIFT to run. Doorways seen: 1 of 4.']) add(s, 'built in code; the numbers change', true);
+for (const s of ['COUNTED', 'RECURRING', 'ONE ACCOUNT', 'CONTESTED', 'GAME', 'Field note:', 'Not yet witnessed', 'You have been through here.']) add(s, 'built in code');
+for (const s of ['Field notes found: 1 / 2.', 'W A S D to walk, SHIFT to run. Doorways seen: 1 of 4.']) add(s, 'built in code; the numbers change', true);
 // every hint as a phone shows it (engine.js TOUCH_WORDS)
 {
   const src = read('js/engine.js'), m = src.match(/const TOUCH_WORDS = (\[[\s\S]*?\n\]);/);

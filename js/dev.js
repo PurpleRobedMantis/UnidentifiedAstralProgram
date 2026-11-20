@@ -28,12 +28,12 @@ const JUMPS = [
     ['Communion', 'end:communion'],
     ['The Wardens', 'end:wardens'],
     ['Hang Up the Phone', 'end:phone'],
-    ['The Sceptic', 'end:sceptic'],
+    ['Scepticism', 'end:sceptic'],
   ]],
 ];
 
 // the sound list: [label, () => play it] by where it is heard. The bedroom portal also plays each layer alone, including
-// the tear that build 115 removed, so the owner can name the one they dislike.
+// the tear that build 115 removed, so each can be heard on its own.
 const SOUNDS = [
   ['BEDROOM PORTAL OPENING', [
     ['Portal, as it is now', () => A.portal(2.6)],
@@ -162,7 +162,7 @@ export function initDev(jump) {
     return r;
   };
   const fearR = slider('Fear', 'fear', 0, 1, 0.01, 'Vignette and heartbeat; the view trembles above 0.50. Calm starts 0.22, afraid 0.72.', (v) => (v > 0.5 ? 'trembling' : ''));
-  const lucR = slider('Lucidity', 'lucidity', 0, 1, 0.01, 'Below 0.55 details change when you look away, and the council ends in the Sceptic. Calm starts 0.60, afraid 0.38.', (v) => (v < 0.55 ? 'unsteady · Sceptic' : 'lucid'));
+  const lucR = slider('Lucidity', 'lucidity', 0, 1, 0.01, 'Below 0.55 details change when you look away, and the council ends in Scepticism. Calm starts 0.60, afraid 0.38.', (v) => (v < 0.55 ? 'unsteady · Sceptic' : 'lucid'));
   const trustR = slider('Trust', 'trust', -4, 6, 1, '2 or more: Communion (if lucid). Below 0: cold lines. -2 or less: "You are not ready."', (v) => (v <= -2 ? 'not ready' : v < 0 ? 'cold' : v >= 2 ? 'Communion' : ''));
   const stareBox = document.createElement('input'); stareBox.type = 'checkbox'; stareBox.onchange = () => { G.stare = stareBox.checked; };
   const stareLab = document.createElement('label'); stareLab.append(stareBox, ' held the stare'); stareLab.style.cssText = 'display:block;margin-top:6px';

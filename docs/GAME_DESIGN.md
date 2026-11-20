@@ -27,9 +27,9 @@ You wake in bed and can only turn your head.
 
 | What you do | What happens | Source |
 |---|---|---|
-| Mash the key | The camera shakes, a fist lifts, your voice comes back as a croak, you sit up. The greys look shocked. One comes round to the bedside with a thin silver wand, climbs onto the bed beside you on their knees, eyes on you, and brings the red light at its tip to a hand's width from your eyes. Electricity, then black. On a repeat night a voice asks, wearily, "Why do we have to go through this every time?" | Fist and voice, shocked greys, the wand, the electricity and the line are each from separate Reddit accounts; the field notes say they are combined |
+| Mash the key | The camera shakes; your right hand twitches with each press and the arm comes up off the covers as the struggle builds; a fist lifts, your voice comes back as a croak, you sit up. The greys look shocked. One comes round to the bedside with a thin silver wand, climbs onto the bed beside you on their knees, eyes on you, and brings the red light at its tip to a hand's width from your eyes. Electricity, then black. On a repeat night a voice asks, wearily, "Why do we have to go through this every time?" | Fist and voice, shocked greys, the wand, the electricity and the line are each from separate Reddit accounts; the field notes say they are combined |
 | Do nothing | Fear rises on its own. You are taken, frightened, and the next act opens with you on the table. | The standard report |
-| Breathe slowly (hold and release in rhythm) | Fear falls. A voice says "It's fine, you are safe." You are taken calm, and you keep more of the night. | Jalal's relaxation method; Phantoms & Monsters line |
+| Breathe slowly (hold and release in rhythm with the hum of their raised hands, which swells and fades; your chest and view rise with each breath, and a grey talks the first breaths through) | Fear falls. A voice says "It's fine, you are safe." You are taken calm, and you keep more of the night. | Jalal's relaxation method; Phantoms & Monsters line |
 
 Breaking free leads straight to the **Missing Time** ending: you wake at 4:14 facing the wrong way in bed, with three marks by your thumb and no memory. The game tells you nothing more and offers the night again. Players who want the ship must stop fighting.
 
@@ -55,7 +55,7 @@ You can walk. A round metal room with four doorways, and the mantis on a dais in
 
 **The classroom.** A grey you somehow recognise hands you a star toy.
 - *Lesson 1, the sky from home:* rotate a field of stars until Orion lines up as seen from Earth.
-- *Lesson 2, the orb:* a glowing orb hovers over a raised dais. By steady attention you turn it into a blue cube, then a purple pyramid, then move it. It responds while your aim is slow and steady, and pushes back when you grab at it. The teacher says "Don't be afraid that it won't work. You're holding yourself back." A second grey says "just have them take it again."
+- *Lesson 2, the orb:* a glowing orb hovers over a raised dais. By steady attention you turn it into a blue cube, then a purple pyramid, then move it. It responds while your aim is slow and steady, and pushes back when you grab at it. A ring round it fills while your eyes rest on it, a faint line points back to it when you lose it, and each change of shape is seen happening. The teacher says "Don't be afraid that it won't work. You're holding yourself back." A second grey says "just have them take it again."
 
 **The window.** A wall-sized screen shows the living world, then what was done to it: a silent flash, mushroom clouds, a firestorm, a dead plain. The film fades and the Earth is below you: it was never a screen. You walk to the glass and lay your hand flat on it. The mantis stands beside you and says "I know this is hard. I'm sorry." You choose how to answer: grief, anger at being shown it, or "why show me?" Mack's cases, with Turner's suspicion available as a reply.
 
@@ -70,11 +70,11 @@ Robert Monroe's Focus 10 and rolling out, and the 1983 US Army Gateway report. W
 
 ### Act 5: the mandala (otherworldly journey and theophany)
 
-After all four rooms the mantis asks, "Would you like to see more?" (if you have shown no trust at all, trust −2 or less, they say "You are not ready." instead and you wake to The Sceptic). Say no and you wake to The Sceptic ending. Say yes and they unfold an arm and lay one long finger in your open hand.
+After all four rooms the mantis asks, "Would you like to see more?" (if you have shown no trust at all, trust −2 or less, they say "You are not ready." instead and you wake to the Scepticism ending). Say no and you wake to the Scepticism ending. Say yes and they unfold an arm and lay one long finger in your open hand.
 
 - The ringing returns and climbs. A crinkling sound.
 - **The waiting room.** A black-and-white checkered palace. Jester faces press out of the walls, sticking out their tongues, turning slowly from frown to grin.
-- **Mechanic: look past them.** Keep your eyes on the far end of the hall. Jester faces swell out of the walls to catch your eye; look straight at one and it shouts an insult ("I've got you now!"), your focus drains and fear rises. Keep looking ahead and focus builds until the palace chars and burns away. One jester only points down the hall, as if it wants you to go on; reports disagree on whether jesters block or guide, and the game keeps both.
+- **Mechanic: look past them.** Keep your eyes on the far end of the hall. Jester faces swell out of the walls to catch your eye; look straight at one and it shouts an insult ("I've got you now!"), your focus drains and fear rises. Every so often one tears itself out of the wall and flies at you, stopping a few centimetres from your eyes to taunt you, then backs away into the dark. Keep looking ahead and focus builds until the palace chars and burns away. One jester only points down the hall, as if it wants you to go on; reports disagree on whether jesters block or guide, and the game keeps both.
 - **The chrysanthemum.** A pink, purple and green mandala grows until it fills the view. An arched door forms in its centre, with more doors behind it. They open.
 - The mantis walks out through the doors towards you, their skin glowing green and their robe shifting colour, and takes hold of you as the last words arrive.
 - **The council.** Darkness and nine orbs of light. A rush of word fragments you cannot hold, then four lines from the orbs.
@@ -98,18 +98,18 @@ You wake. What you find depends on the night.
 | **Communion** | Lucidity 0.55 or more and trust 2 or more, then said thank you or nothing | Morning (8:08 on the clock), full memory, a mantis on the outside of the window | Mack, Strieber |
 | **The Wardens** | Challenged them or tried to pass the mandala | Thrown back. 3:00 again. Was the answer real, or what you already believed? | Turner, the prison-planet community, the 2024 DMT trip report |
 | **Hang Up the Phone** | "Is that all this is?", or thank you / nothing with lucidity kept but trust under 2 | You wake laughing and angry. "You can be whoever and do whatever you want." The clock ticks to 3:01. "I'm coming back later, to check again." | DMT trip report, r/Experiencers and r/DMT, 2024 |
-| **The Sceptic** | Lucidity under 0.55 at the council, "No" when the mantis offers more, or no trust shown at all (not offered) | Morning. A calm voice explains sleep paralysis. There is a scoop mark on your shin | Clancy and French, against Hopkins |
+| **Scepticism** | Lucidity under 0.55 at the council, "No" when the mantis offers more, or no trust shown at all (not offered) | Morning. A calm voice explains sleep paralysis. There is a scoop mark on your shin | Clancy and French, against Hopkins |
 
 ## Systems
 
-- **Fear** (hidden, shown only through camera shake when it is high, heartbeat and vignette). Rises with struggle and with looking at what frightens you; falls with slow breathing.
-- **Lucidity** (hidden). How much you will remember. Gained by staying calm, holding the stare, the orb, "It's alive" at the window, the still room and saying nothing at the council. Lost by freezing, looking away from the stare and doubting at the window. Below 0.55, on the ship and in the vision, details will not hold: while you look away, door marks, writing, the children, the Moon, the forms in the vessels and the council orbs change, never while you watch (the lucid-dream check). At the council it decides between Communion and The Sceptic.
+- **Fear** (hidden, shown only through camera shake when it is high, heartbeat and vignette). Rises with struggle and with looking at what frightens you; falls with slow breathing, holding the stare, and keeping your eyes on the way ahead in the jester palace.
+- **Lucidity** (hidden). How much you will remember. Gained by staying calm, holding the stare, the orb, "It's alive" at the window, the still room and saying nothing at the council. Lost by freezing, looking away from the stare and doubting at the window. Below 0.55, on the ship and in the vision, details will not hold: while you look away, door marks, writing, the children, the Moon, the forms in the vessels and the council orbs change (the lucid-dream check); a detail you hold in view may warp, stretching and wavering, and change in front of you; and on the ship, now and then, the whole view blurs while you struggle to remain lucid. At the council it decides between Communion and Scepticism.
 - **Trust.** Earned by breathing, holding the stare, "Yes", "It's alive", taking the toy and "Thank you"; lost by "No", the rude thought, doubting at the window and pushing past the council. It changes the mantis's lines, whether you are offered the vision, and Communion vs Hang Up the Phone. Exact numbers: `DECISIONS.md`.
 - **Field notes.** Each motif you witness unlocks a short entry naming who reported it and how well sourced it is. Open with Tab. This is where the faithfulness is visible, and it gives a reason to replay.
 
 ## Controls
 
-Mouse to look (arrow keys also turn the head); W A S D to walk when you can (Shift to run); Space to struggle; hold and release Shift to breathe; E to interact; number keys for dialogue; Tab for field notes; P or Esc to pause; F3 for a frame-rate readout; F2 for developer mode (speed and scene jumps). Touch controls appear on touch screens.
+Mouse to look (arrow keys also turn the head); W A S D to walk when you can (Shift to run); Space to struggle; hold Shift as the hum swells and let go as it fades to breathe; E to interact; number keys for dialogue; Tab for field notes; P or Esc to pause; F3 for a frame-rate readout; F2 for developer mode (speed and scene jumps). Touch controls appear on touch screens.
 
 ## Look and sound
 
@@ -126,7 +126,7 @@ Mouse to look (arrow keys also turn the head); W A S D to walk when you can (Shi
 - Three.js in the browser, plain JavaScript modules, no build step.
 - All models are built in code and all audio is synthesised at run time. The only image files are three public-domain NASA maps of the Earth and Moon.
 - Runs from any static web host (itch.io as an HTML game, GitHub Pages and so on) or locally with the included zero-dependency server and start script.
-- Target: any recent desktop browser with WebGL, a mouse and a keyboard. Phones work too, with on-screen touch controls.
+- Target: any recent browser with WebGL 2 and import maps (iOS 16.4 or newer on iPhone and iPad), a mouse and a keyboard. Phones and tablets work too, with on-screen touch controls shown from the start.
 
 ## Scope
 

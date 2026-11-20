@@ -24,15 +24,15 @@ const ROUTES = [
   ['crossroads: greeting after the stare', 'scene=hub&stare=1', { approach: true, max: 2500 }, (r) => !said(r, 'You held our gaze') ? 'no stare greeting' : ''],
   ['crossroads: greeting when afraid', 'scene=hub&path=afraid', { approach: true, max: 2500 }, (r) => !said(r, 'You are afraid') ? 'no afraid greeting' : ''],
   ['crossroads: rude thought costs trust', 'scene=hub', { approach: true, picks: [3], max: 2500 }, (r) => r.trust !== -1 ? 'trust ' + r.trust : ''],
-  ['crossroads: no trust, no vision', 'scene=hub&seen=4&asked=1&trust=-2', { approach: true, max: 20000 }, (r) => !said(r, 'You are not ready') || r.end !== 'THE SCEPTIC' ? 'end ' + r.end : ''],
-  ['crossroads: see more, no', 'scene=hub&seen=4&asked=1', { approach: true, picks: [2], max: 20000 }, (r) => r.end !== 'THE SCEPTIC' ? 'end ' + r.end : ''],
+  ['crossroads: no trust, no vision', 'scene=hub&seen=4&asked=1&trust=-2', { approach: true, max: 20000 }, (r) => !said(r, 'You are not ready') || r.end !== 'SCEPTICISM' ? 'end ' + r.end : ''],
+  ['crossroads: see more, no', 'scene=hub&seen=4&asked=1', { approach: true, picks: [2], max: 20000 }, (r) => r.end !== 'SCEPTICISM' ? 'end ' + r.end : ''],
   ['council: thank you, lucid and trusting', 'scene=mandala&lucid=0.7&trust=1', { picks: [2], max: 60000 }, (r) => r.end !== 'COMMUNION' ? 'end ' + r.end : ''],
   ['council: thank you, lucid, no trust', 'scene=mandala&lucid=0.7', { picks: [2], max: 60000 }, (r) => r.end !== 'HANG UP THE PHONE' ? 'end ' + r.end : ''],
-  ['council: thank you, not lucid', 'scene=mandala&lucid=0.5&trust=4', { picks: [2], max: 60000 }, (r) => r.end !== 'THE SCEPTIC' ? 'end ' + r.end : ''],
+  ['council: thank you, not lucid', 'scene=mandala&lucid=0.5&trust=4', { picks: [2], max: 60000 }, (r) => r.end !== 'SCEPTICISM' ? 'end ' + r.end : ''],
   ['council: say nothing tips lucidity', 'scene=mandala&lucid=0.5&trust=2', { picks: [4], max: 60000 }, (r) => r.end !== 'COMMUNION' ? 'end ' + r.end : ''],
   ['council: is that all', 'scene=mandala', { picks: [1, 1], max: 60000 }, (r) => r.end !== 'HANG UP THE PHONE' ? 'end ' + r.end : ''],
   ['council: let me past', 'scene=mandala&trust=3', { picks: [3], max: 60000 }, (r) => r.end !== 'THE WARDENS' || r.trust !== 1 ? `end ${r.end} trust ${r.trust}` : ''],
-  ...[['missing', 'MISSING TIME'], ['communion', 'COMMUNION'], ['wardens', 'THE WARDENS'], ['phone', 'HANG UP THE PHONE'], ['sceptic', 'THE SCEPTIC']]
+  ...[['missing', 'MISSING TIME'], ['communion', 'COMMUNION'], ['wardens', 'THE WARDENS'], ['phone', 'HANG UP THE PHONE'], ['sceptic', 'SCEPTICISM']]
     .map(([k, t]) => ['ending ' + k, 'scene=end:' + k, {}, (r) => r.end !== t ? 'end ' + r.end : '']),
 ];
 const only = process.argv[2];

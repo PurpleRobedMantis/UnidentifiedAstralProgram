@@ -20,7 +20,7 @@ The game dramatises experiences that real people have reported. It takes no posi
 
 ## Run it
 
-You need a recent browser with WebGL. On a computer you play with a mouse and a keyboard; on a phone the game shows touch controls. Headphones are recommended. three.js is included in `vendor/`, so there is nothing to install. To play locally you need [Node.js](https://nodejs.org/) (any current LTS release, 18 or newer) for the bundled server.
+You need a recent browser with WebGL 2 and import maps: a current Chrome, Edge, Firefox or Safari, and on an iPhone or iPad iOS 16.4 or newer (an older browser shows a message saying so instead of the BEGIN button). On a computer you play with a mouse and a keyboard; on a phone or tablet the game shows touch controls from the start. Headphones are recommended. three.js is included in `vendor/`, so there is nothing to install. To play locally you need [Node.js](https://nodejs.org/) (any current LTS release, 18 or newer) for the bundled server.
 
 **Windows:** double-click `start.bat`. It starts a small local server and opens the game in your browser. Keep the window open while you play.
 
@@ -41,7 +41,7 @@ The game must be served over HTTP; opening `index.html` directly from disk will 
 | W A S D | Walk, when you are able to |
 | Shift + W | Run, while walking |
 | Space | Struggle |
-| Shift | Breathe: hold while the ring grows, release while it shrinks |
+| Shift | Breathe: hold as the hum swells, let go as it fades |
 | E | Interact |
 | 1-4 | Choose an answer |
 | Tab | Field notes (in play); on a menu, Tab and Shift+Tab move between buttons and Enter presses one |
@@ -60,7 +60,7 @@ Each thing you witness unlocks a field note (Tab) saying who reported it and how
 
 - **Counted:** a survey, study or documented programme put a number or a record on it.
 - **Recurring:** several independent researchers or witnesses report it.
-- **Single:** one witness, or one researcher's cases.
+- **One account:** one witness, or one researcher's cases.
 - **Contested:** disputed, or widely regarded as a hoax.
 - **Game:** the game's own combination of separate reports, flagged so it is not mistaken for a single account.
 
@@ -73,6 +73,7 @@ Which ending you reach depends on whether you fight, whether you hold the stare,
 ## Files
 
 - `index.html`: page, overlays and the import map
+- `js/compat.js`: a plain script run before the game that shows a message on browsers too old to run it
 - `js/main.js`: start-up and scene order
 - `js/engine.js`: renderer, camera, input, pause and on-screen text
 - `js/models.js`: every model and texture, built in code
@@ -81,7 +82,8 @@ Which ending you reach depends on whether you fight, whether you hold the stare,
 - `js/jester-lines.txt`: the jester taunts, one per line, editable
 - `js/jester-lines.js`: loads the taunts
 - `js/dev.js`: the developer menu
-- `js/touch.js`: touch controls for phones
+- `js/touch.js`: touch controls for phones and tablets
+- `js/clips.js`, `js/clips/`: keyframed body movements exported from Blender, and the code that plays them on a grey
 - `js/audio.js`: synthesised sound
 - `js/notes.js`: the field notes
 - `js/i18n.js`, `js/lang/`: the languages; each file in `js/lang/` maps the English text to one translation
@@ -95,7 +97,7 @@ Which ending you reach depends on whether you fight, whether you hold the stare,
 - `server.js`, `start.bat`: a dependency-free static file server for local play, and a Windows launcher for it
 - `docs/RESEARCH.md`: the sources behind every scene
 - `docs/GAME_DESIGN.md`: the design
-- `tools/` (repository only): `release.js` builds the public copy and zip, `shot.js` captures stills headless in Chrome, `routes.js` plays every route and ending headless and checks the result, `i18n.js` lists text that still needs translating, `captions.js` lists every on-screen line, `levels.js` measures the layers of a sound, `drivers/` holds capture scripts
+- `tools/` (repository only): `release.js` builds the public copy and zip, `shot.js` captures stills headless in Chrome, `routes.js` plays every route and ending headless and checks the result, `i18n.js` lists text that still needs translating, `captions.js` lists every on-screen line, `levels.js` measures the layers of a sound, `meshclip.js` checks every arm vertex of a grey against its body for clipping, `blender/` builds the grey rig in Blender and exports keyframed clips (with `anim/grey-rig.json`), `drivers/` holds capture scripts
 
 ## Developer shortcuts
 

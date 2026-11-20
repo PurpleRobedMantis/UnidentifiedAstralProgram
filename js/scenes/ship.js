@@ -46,8 +46,9 @@ const glowTex = () => { if (!glowCache) { glowCache = canvasTex(128, 128, (g) =>
 // Colours in these shaders are display (sRGB) values: ShaderMaterial output is not converted.
 const dcol = (hex) => new THREE.Color().setHex(hex, THREE.LinearSRGBColorSpace);
 // the child who looks at you in the classroom is the one who holds out the toy in the containers hall (build 146): same
-// size and clothes colour, and makeHuman picks hair, hair style and eye colour from the colour, so it is the same child
-const KNOWN_KID = { scale: 0.55, color: 0x6a7b99 };
+// size, clothes colour and eye colour (makeHuman picks those from the colour), and their own copper hair, cut short, which
+// no other child in the classroom has, so they stand out and are the same child in both rooms
+const KNOWN_KID = { scale: 0.55, color: 0x6a7b99, hair: { hair: 0xa4502a, hairStyle: 0 } };
 const TIME = { value: 0 };
 const FOGU = { uFogC: { value: new THREE.Color(0) }, uFogN: { value: 1e6 }, uFogF: { value: 2e6 } };
 // call once per scene, after the scene's fog is set (on() callbacks are cleared with the scene)
@@ -659,7 +660,7 @@ async function talk(mantis) {
       ['We are still teaching you.', 'them'],
       ['They tilt their head. A run of clicks, soft and fast, and nothing you can turn into words.', 'self'],
       ['Find joy.', 'them'],
-      ['You must give back.', 'them'],
+      ['You must give something back.', 'them'],
       ['They look at you for a long time. You have the feeling of being read like a book.', 'self'],
       ['Calm.', 'them'],
     ];
@@ -813,7 +814,7 @@ async function classroom() {
   cols.forEach((c, i) => {
     const side = i % 2 ? 1 : -1, k = Math.floor(i / 2), s = 0.55 + (i % 3) * 0.08;
     // seated on low stools in a circle round the dais, open on your side; the nearest (i = 0) faces you and later shows off
-    const th = side * (0.42 + k * 0.42), kid = makeHuman(i ? s : KNOWN_KID.scale, c, { seated: true });
+    const th = side * (0.42 + k * 0.42), kid = makeHuman(i ? s : KNOWN_KID.scale, c, i ? { seated: true } : { seated: true, ...KNOWN_KID.hair });
     kid.position.set(Math.sin(th) * 2.2, 0, -2.6 + Math.cos(th) * 2.2);
     if (i === 0) kid.lookAt(0, 0, 1.3); else kid.lookAt(0, 0, -2.6);
     g.add(kid); kids.push(kid);
@@ -936,8 +937,31 @@ async function classroom() {
   for (const [r, rx] of [[0.26, 1.2], [0.31, -0.6]]) { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.003, 6, 80), orbitM); t.rotation.x = rx; orb.add(t); }
   const hum = A.drone(330, { type: 'triangle', g: 0.02 });
   await say('Now this. Change it. Then bring it to you.', 'them');
-  hint("Rest your attention on it and follow it slowly. Don't grab at it.");
-  let p = 0, stage = 0, flinch = 0; tt = 0; let told = 0;
+  hint("Keep your eyes on it and follow it slowly. Don't grab at it.");
+  // what to do is shown on the orb itself (that looking at it is what changes it is otherwise easy to miss): a ring round
+  // it fills as it changes and brightens while your eyes are on it, a dot marks where your eyes are, and a faint line
+  // runs from the dot to the orb whenever you have lost it. On a phone, FOCUS (E.gazeAt) eases your view onto it.
+  const gz = $('gaze'), gzDot = $('gazeDot'), gzLine = $('gazeLine'), gv = V(0, 0, 0);
+  gz.style.display = gzDot.style.display = 'block'; E.gazeAt = orb.position;
+  const gaze = (p, aimed, snapped, col) => {
+    gv.copy(orb.position).project(E.camera);
+    const W = innerWidth, H = innerHeight, x = (gv.x + 1) / 2 * W, y = (1 - gv.y) / 2 * H, behind = gv.z > 1;
+    const d = E.camera.position.distanceTo(orb.position), r = Math.max(26, Math.min(160, 0.3 / d / Math.tan(E.camera.fov * Math.PI / 360) * H / 2));
+    gz.style.display = behind ? 'none' : 'block';
+    gz.style.width = gz.style.height = (2 * r).toFixed(0) + 'px'; gz.style.transform = `translate(${(x - r).toFixed(1)}px, ${(y - r).toFixed(1)}px)`;
+    gz.style.setProperty('--p', (Math.min(1, p) * 100).toFixed(1) + '%'); gz.style.setProperty('--c', col);
+    gz.classList.toggle('on', aimed); gz.classList.toggle('snap', snapped);
+    const dx = x - W / 2, dy = y - H / 2, len = Math.hypot(dx, dy) - r - 6;
+    gzLine.style.display = !aimed && !behind && len > 12 ? 'block' : 'none';
+    gzLine.style.width = Math.max(0, len).toFixed(0) + 'px'; gzLine.style.transform = `rotate(${Math.atan2(dy, dx).toFixed(3)}rad)`;
+  };
+  // a change of shape is seen happening: it shrinks and spins, takes the new shape at its smallest, and swells back
+  let morph = 0, pending = -1; const MORPH = 0.8;
+  const reshape = (s) => {
+    orb.geometry = OG[s];
+    ou.uColor.value.setHex(OC[s], THREE.LinearSRGBColorSpace); ol.color.setHex(s === 1 ? 0x3d6bff : 0x9a4bff); haloM.color.setHex(OC[s]); orbitM.color.setHex(OC[s]);
+  };
+  let p = 0, stage = 0, flinch = 0; tt = 0; let told = 0, nudged = false;
   await new Promise((res) => {
     const off = on((dt, t) => {
       tt += dt; flinch = Math.max(0, flinch - dt * 2);
@@ -946,6 +970,11 @@ async function classroom() {
       const roam = Math.min(1, tt / 3), ramp = roam * roam * (3 - 2 * roam);
       orb.position.set(Math.sin(tt * 0.33) * 0.75 * ramp + flinch * 0.5, 1.25 + Math.sin(tt * 0.47) * 0.16 * ramp + flinch * 0.3, -2.6);
       orb.rotation.y += dt * 0.6; orb.rotation.x += dt * 0.25;
+      if (morph > 0) {
+        morph = Math.max(0, morph - dt); const k = 1 - morph / MORPH, sk = Math.sin(Math.PI * k);
+        orb.scale.setScalar(1 - 0.6 * sk); orb.rotation.y += dt * 9 * sk;
+        if (k >= 0.5 && pending >= 0) { reshape(pending); pending = -1; }
+      } else orb.scale.setScalar(1);
       const aimed = angleTo(orb.position) < 0.085, sp2 = E.lookSpeed || 0;
       if (aimed && sp2 < 0.7) p += dt / 15;
       else if (sp2 > 2.4) { p -= dt / 3; flinch = 1; }
@@ -955,17 +984,17 @@ async function classroom() {
       ou.uGlow.value = 0.4 + (aimed ? 1.2 : 0); haloM.opacity = aimed ? 0.9 : 0.55; hum.set(330 + p * 330, aimed ? 0.06 : 0.02, 0.1);
       bar(p);
       const s = p >= 0.66 ? 2 : p >= 0.33 ? 1 : 0;
-      if (s > stage) {
-        stage = s; A.bloom(s);
-        orb.geometry = OG[s];
-        ou.uColor.value.setHex(OC[s], THREE.LinearSRGBColorSpace); ol.color.setHex(s === 1 ? 0x3d6bff : 0x9a4bff); haloM.color.setHex(OC[s]); orbitM.color.setHex(OC[s]);
-      }
+      if (s > stage) { stage = s; A.bloom(s); if (pending >= 0) reshape(pending); pending = s; morph = MORPH; }
+      gaze(p, aimed, flinch > 0.3, '#' + OC[stage].toString(16).padStart(6, '0'));
+      if (!nudged && tt > 6 && p < 0.08) { nudged = true; say('Keep your eyes on it.', 'them'); }
       if (told === 0 && tt > 16 && p < 0.5) { told = 1; say("Don't be afraid that it won't work. You're holding yourself back.", 'them'); note('holding'); }
       if (told === 1 && tt > 38 && p < 0.8) { told = 2; say('Just have them take it again.', 'them'); note('again'); }
       if (p >= 1) { off(); res(); }
     });
   });
   bar(null); hint(''); note('orb'); G.lucidity += 0.06;
+  if (pending >= 0) reshape(pending); orb.scale.setScalar(1);
+  gz.style.display = gzDot.style.display = gzLine.style.display = 'none'; E.gazeAt = null; E.steady = false;
   A.release();
   const o0 = orb.position.clone();
   await tween(2.5, (k) => orb.position.lerpVectors(o0, V(0, 1.3, 0.5), k));
@@ -1939,7 +1968,7 @@ async function containers() {
   // low lucidity: look back and the plate says something else
   unsteady(plate, (k, n) => { drawPlate(pTex.image.getContext('2d'), k ? 7 + n * 1013 : 7); pTex.needsUpdate = true; });
   for (const x of [-0.7, 0.7]) { const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.1, 6), pipeM); rod.position.set(x, 3.27, -1.42); g.add(rod); }
-  const child = makeHuman(KNOWN_KID.scale, KNOWN_KID.color); child.position.set(0, 0, -19.5); g.add(child);
+  const child = makeHuman(KNOWN_KID.scale, KNOWN_KID.color, KNOWN_KID.hair); child.position.set(0, 0, -19.5); g.add(child);
   const grey = makeGrey(); grey.position.set(0.8, 0, -19.9); g.add(grey);
   const toy = new THREE.Mesh(new THREE.TetrahedronGeometry(0.09), sm(JEWEL, { uColor: { value: dcol(0xffd27a) }, uGlow: { value: 1.2 } })); toy.position.set(0, 0.72, -19.15); g.add(toy);
   const tl = new THREE.PointLight(0xffc24a, 1.5, 4); toy.add(tl);
@@ -2207,7 +2236,7 @@ async function viewing() {
   await fade(0, 2.2, '#fff');
   await say('You are out. And you are not on any ship.');
   await say('Your own room. Your own bed. Someone is asleep in it.');
-  await say('It is you. You never left.');
+  await say('It is you. You never left... or did you?');
   await wait(0.8);
   const hd = watcher.userData.head, want = Math.atan2(E.camera.position.x - 1.0, E.camera.position.z + 0.5) + Math.PI / 2;
   A.tone(110, 1.6, { type: 'sawtooth', g: 0.22, to: 55 });

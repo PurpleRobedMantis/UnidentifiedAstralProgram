@@ -5,7 +5,7 @@ import { A } from '../audio.js';
 import { loadJesterLines } from '../jester-lines.js';
 import { buildBedroom, makeMantis, idleMantis, makePlayerBody } from '../models.js';
 import { resetShip } from './ship.js';
-import { makePalace, makeJesterFace, PALACE_FACES, palaceSpot, palaceFace, palaceFaceOff, makeMandala, makePortal, makeOrb, makeMotes, prewarm } from '../fx.js';
+import { makePalace, makeJesterFace, PALACE_FACES, palaceSpot, palaceFace, palaceFaceOff, makeFlyingJester, makeMandala, makePortal, makeOrb, makeMotes, prewarm } from '../fx.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const _dir = new THREE.Vector3();
@@ -15,6 +15,7 @@ const dir = (yaw, pitch) => _dir.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(
 export async function mandala() {
   E.scene.background = new THREE.Color(0);
   setView(0, 1.6, 0, 0, 0); E.mode = 'locked'; E.heart = true; E.unsteady = true;
+  E.noLapse = true;   // no lucidity blur in the vision (the palace, the flower, the council): only the details that change
   // the developer menu can start the act at the council; everything before it is skipped
   palaceToMantis: {
   if (E.devCouncil) { E.devCouncil = false; prewarm(E.renderer, E.camera); fade(0, 2); break palaceToMantis; }
@@ -94,10 +95,72 @@ export async function mandala() {
   const dropJester = (j) => { j.visible = false; palaceFaceOff(pu, j.userData.slot); };
   const clearJesters = () => { for (const j of jesters.splice(0)) dropJester(j); };
   const mocking = () => { let n = 0; for (const j of jesters) if (!j.userData.pointing) n++; return n; };
+  // Now and then (every 9-16 s, far less often than faces grow) a face tears itself out of the wall and flies at you:
+  // it comes away where it was, rushes in faster and faster until it is a few centimetres from your eyes, wherever you
+  // are looking, hangs there grinning, then backs off into the dark and is gone. A quad of its own (makeFlyingJester),
+  // since the wall faces are drawn inside the palace shader. Phases in seconds: TEAR, RUSH, HOLD, BACK.
+  const flyer = makeFlyingJester(); hall.add(flyer);
+  const FLY = { TEAR: 0.3, RUSH: 0.75, HOLD: 0.8, BACK: 0.7, NEAR: 0.1 };
+  let flyT = 5 + Math.random() * 3, fly = null;
+  const fFwd = V(0, 0, -1), fTo = V(0, 0, 0);
+  const launch = () => {
+    let best = null;
+    for (const j of jesters) { const u = j.userData; if (!u.pointing && u.dir && u.sw > 0.6 && u.dist > 4 && (!best || u.dist < best.userData.dist)) best = j; }
+    if (!best) return false;
+    const u = best.userData, from = E.camera.position.clone().addScaledVector(u.dir, u.dist);
+    dropJester(best); jesters.splice(jesters.indexOf(best), 1);
+    fly = { t: 0, from, s0: u.spot.size * 5, mood: u.mood, said: false };
+    const fu = flyer.material.uniforms; fu.uMood.value = u.mood; fu.uFade.value = 1; fu.uT.value = Math.random() * 10;
+    flyer.position.copy(from); flyer.scale.setScalar(fly.s0); flyer.quaternion.copy(E.camera.quaternion); flyer.visible = true;
+    A.honk();
+    return true;
+  };
+  const runFly = (dt) => {
+    if (!fly) { flyT -= dt; if (flyT <= 0) flyT = launch() ? 0 : 0.8; return; }
+    const f = fly, fu = flyer.material.uniforms; f.t += dt; fu.uT.value += dt;
+    E.camera.getWorldDirection(fFwd); fTo.copy(E.camera.position).addScaledVector(fFwd, FLY.NEAR);
+    flyer.quaternion.copy(E.camera.quaternion);
+    const S1 = 0.62;   // life size: the face about 30 cm across
+    let t = f.t;
+    if (t < FLY.TEAR) {   // comes away from the wall: swells a little and starts to grin
+      const k = t / FLY.TEAR; flyer.scale.setScalar(f.s0 * (1 + 0.12 * Math.sin(Math.PI * k))); fu.uMood.value = f.mood + (1 - f.mood) * k;
+      return;
+    }
+    t -= FLY.TEAR;
+    if (t < FLY.RUSH) {   // faster and faster, straight at your eyes; the size eases from the wall's to life size
+      const k = t / FLY.RUSH, e = k * k * k;
+      if (!f.rushing) { f.rushing = true; A.cackle(0, 1.6); }
+      flyer.position.lerpVectors(f.from, fTo, e);
+      flyer.scale.setScalar(Math.exp(Math.log(f.s0) + (Math.log(S1) - Math.log(f.s0)) * e));
+      return;
+    }
+    t -= FLY.RUSH;
+    if (t < FLY.HOLD) {   // a few centimetres from your eyes, trembling, shouting; the grin turns to a scowl
+      if (!f.said) {
+        f.said = true; cool = Math.max(cool, FLY.HOLD + FLY.BACK);
+        A.noise(0.22, { g: 0.32, f: 160, q: 0.8 }); if (A.mock) A.mock(0, 1.3);
+        E.panic = Math.min(1, (E.panic || 0) + 0.4);   // a start: the heart races for a few beats (panic eases each beat); no lasting fear, since you did not look for it
+        say(pickLine(), 'jest', 1.6);
+      }
+      flyer.position.copy(fTo).add(fFwd.set(Math.sin(E.time * 53) * 0.003, Math.sin(E.time * 41 + 1) * 0.003, 0).applyQuaternion(E.camera.quaternion));
+      flyer.scale.setScalar(S1); fu.uMood.value = t < FLY.HOLD * 0.5 ? 1 : Math.max(0, 1 - (t - FLY.HOLD * 0.5) * 6);
+      return;
+    }
+    t -= FLY.HOLD;
+    if (t < FLY.BACK) {   // backs off into the dark and fades
+      const k = t / FLY.BACK, e = k * k * (3 - 2 * k);
+      E.camera.getWorldDirection(fFwd);
+      flyer.position.copy(E.camera.position).addScaledVector(fFwd, FLY.NEAR + 2.4 * e);
+      flyer.scale.setScalar(S1); fu.uFade.value = 1 - e;
+      return;
+    }
+    flyer.visible = false; fu.uFade.value = 0; fly = null; flyT = 9 + Math.random() * 7;
+  };
   E.gazeAt = farPos;
   await new Promise((res) => {
     const off = on((dt, t) => {
       tt += dt; cool -= dt; spawnT -= dt;
+      runFly(dt);
       if (spawnT <= 0 && cool <= 0 && mocking() < 4) spawnT = spawn(false) ? Math.max(0.35, 0.7 + Math.random() * 0.9 - focus * 0.5) : 0.3;
       if (!pointed && focus > 0.68 && spawn(true)) { pointed = true; note('pointing'); say('One of them only points down the hall, the way you are already going.'); }
       let active = null, nearA = 9, nearYaw = 0;
@@ -110,6 +173,7 @@ export async function mandala() {
         const sw = Math.min(1, u.age * 2.5) * Math.min(1, Math.max(0, (u.life - u.age) * 3)) * Math.min(1, Math.max(0, (depth - 2.6) / 1.5));
         palaceFace(pu, u.slot, u.spot, sw, u.mood, u.pointing ? 0 : Math.sin(t * 5 + u.life) * 0.14, u.pointing, jd);
         u.yaw = Math.atan2(-jd.x, -jd.z); u.pitch = Math.asin(jd.y);
+        u.dir = (u.dir || V(0, 0, 0)).copy(jd); u.dist = depth / Math.max(0.05, Math.abs(jd.z)); u.sw = sw;
         j.position.copy(E.camera.position).addScaledVector(jd, 4);
         // grin and frown swap about twice a second; the shader morphs the mouth between them
         if (!u.pointing) { u.mood += ((Math.floor(t * 0.9 + u.life) % 2 ? 1 : 0) - u.mood) * Math.min(1, dt * 2.5); ju.uMood.value = u.mood; active = j; }
@@ -127,7 +191,7 @@ export async function mandala() {
         }
       }
       // djinn whispers: now and then from either side; closer, louder and from the jester's side when one is near the centre of view
-      whisperT -= dt;
+      whisperT -= dt / (E.timeScale || 1);   // real seconds: at a developer speed-up the voices keep their own pace
       if (whisperT <= 0 && A.murmur) {
         // thick with voices: murmurs from both sides all the time, laughter now and then, both closer and louder when one of them is near your eye
         if (nearA < 0.6) { const c = 1 - nearA / 0.6, side = (nearYaw > E.yaw ? -1 : 1) * (0.5 + 0.4 * c); A.murmur(side, 1.4 + 1.2 * c); if (Math.random() < 0.35) A.whisper(-side, 1.8); if (Math.random() < 0.4) A.cackle(side, 1.0 + 0.7 * c); if (A.mock && Math.random() < 0.3) A.mock(side, 1.0 + 0.5 * c); whisperT = 0.4 + Math.random() * 0.7; }
@@ -141,12 +205,15 @@ export async function mandala() {
         E.pull.yaw = dy / n * m; E.pull.pitch = dp / n * m;
       } else E.pull.yaw = E.pull.pitch = 0;
       E.dread = Math.max(0, E.dread - dt / 400);   // it barely settles while you are still in the hall
-      if (angleTo(farPos) < 0.24) focus += dt / 14; else focus = Math.max(0, focus - dt / 90);
+      // eyes on the way ahead: focus builds, and the heart settles (one face's dread drains in about 10 s) and fear eases a little, never below 0.2
+      if (angleTo(farPos) < 0.24) { focus += dt / 14; E.dread = Math.max(0, E.dread - dt * 0.02); if (G.fear > 0.2) G.fear = Math.max(0.2, G.fear - dt * 0.006); }
+      else focus = Math.max(0, focus - dt / 90);
       if (tt > 110) focus += dt / 8;
       pu.uFocus.value = Math.min(1, focus); bar(focus);
       if (focus >= 1) { off(); res(); }
     });
   });
+  flyer.visible = false;
   E.pull.yaw = E.pull.pitch = 0; E.gazeAt = null; bar(null); hint(''); document.body.classList.remove('legible'); E.mode = 'locked'; note('lookpast');
   { const d0 = E.dread; tween(4, (k) => { E.dread = d0 * (1 - k); }); }   // you stop caring: the heart comes back down
   say('What a circus. You stop caring about them, and look past.', 'self', 2.6);
@@ -327,7 +394,7 @@ const ENDS = {
   communion: { title: 'COMMUNION', text: 'You did not fight, you met them halfway, and you were allowed to keep the night. Whether they are teachers is still your guess.', echo: 'Echoes John Mack and Whitley Strieber: terrifying, and transforming. About 70% of surveyed experiencers say contact changed their life for the better.' },
   wardens: { title: 'THE WARDENS', text: 'They told you what you already believed, and when you asked for more they put you back. Something is further in. They would rather you did not look.', echo: 'Echoes Karla Turner and the prison-planet community. It is one reading among several, and no better proven than the others.' },
   phone: { title: 'HANG UP THE PHONE', text: 'You got the message. It was the one you had always suspected, which is either the proof or the problem.', echo: 'Echoes a DMT trip from 2023: the answer was the one the author already suspected.' },
-  sceptic: { title: 'THE SCEPTIC', text: 'By morning most of it is gone, and what is left has an explanation. Most of it.', echo: 'Echoes Susan Clancy and Chris French on sleep paralysis, and the experiencers who answer them with marks on the body. Staying calm and holding the stare lets you keep more of the night.' },
+  sceptic: { title: 'SCEPTICISM', text: 'By morning most of it is gone, and what is left has an explanation. Most of it.', echo: 'Echoes Susan Clancy and Chris French on sleep paralysis, and the experiencers who answer them with marks on the body. Staying calm and holding the stare lets you keep more of the night.' },
 };
 
 export async function ending(kind) {
@@ -514,7 +581,7 @@ export async function ending(kind) {
   await fade(1, 2.2);
   const e = ENDS[kind];
   $('endTitle').textContent = tr(e.title); $('endText').textContent = tr(e.text); $('endEcho').textContent = tr(e.echo);
-  $('endNotes').textContent = tr('Field notes witnessed: ' + noteCount() + '.');
+  $('endNotes').textContent = tr('Field notes found: ' + noteCount() + '.');
   $('endcard').style.display = 'block';
   if (document.pointerLockElement) document.exitPointerLock();
   $('endNotesBtn').onclick = () => toggleNotes(true);

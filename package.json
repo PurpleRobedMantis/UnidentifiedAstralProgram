@@ -1,6 +1,6 @@
 {
   "name": "unidentified-astral-program",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A first-person three.js browser game that plays one night of contact as experiencers describe it, built from documented accounts.",
   "private": true,
   "directories": {

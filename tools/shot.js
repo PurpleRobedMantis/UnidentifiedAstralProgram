@@ -9,6 +9,9 @@
 //   await until(fn, max)      step until fn() is true (max frames, default 3000)
 //   sub()                     the current subtitle text
 //   await snap(name)          save <out-prefix>-<name>.png
+//   view(pos, target)         render the following snaps from another camera (arrays or vectors); view(null) goes back
+//   around(obj, side, dist, h) close-up of obj from its 'front', '34' (three-quarter), '34L', 'side' or 'back', dist m away
+//                             (default 1.4), looking at height h (default 0.6 m up the object: a grey's middle); around(null) goes back
 // Anything the driver pushes to window.__log is printed at the end.
 // RULES (each cost a failed or hung run before build 142):
 //   - The driver is cut at every `await snap(...)`; each stretch runs as its own function. Snaps go at the top level only
@@ -96,6 +99,8 @@ async function up(url, tries = 40) { for (let i = 0; i < tries; i++) { try { ret
       window.sub=()=>document.getElementById('sub').textContent;
       window.until=async(fn,max=3000)=>{ for(let i=0;i<max;i++){ if(fn()) return true; await window.steps(1); } return false; };
       window.__snaps=[]; window.snap=async(n)=>{ E.noRender=false; document.getElementById('fade').style.opacity=0; window.__ms+=33; E.step(window.__ms); window.__snaps.push(n); await new Promise(r=>setTimeout(r,60)); };
+      window.view=(pos,target)=>{ const r=E.renderer; if(!r.__vw){ const o=r.render.bind(r); r.render=(sc,cam)=>{ const v=window.__view; if(!v) return o(sc,cam); const a=cam.position.clone(), q=cam.quaternion.clone(); cam.position.set(v[0][0],v[0][1],v[0][2]); cam.lookAt(v[1][0],v[1][1],v[1][2]); cam.updateMatrixWorld(); o(sc,cam); cam.position.copy(a); cam.quaternion.copy(q); cam.updateMatrixWorld(); }; r.__vw=1; } window.__view = pos ? [pos.toArray ? pos.toArray() : pos, target.toArray ? target.toArray() : target] : null; };
+      window.around=(obj,side,dist,h)=>{ if(!obj){ window.view(null); return; } dist=dist||1.4; const a={front:0,'34':Math.PI/4,side:Math.PI/2,back:Math.PI,'34L':-Math.PI/4}[side||'front']; obj.updateMatrixWorld(true); const t=obj.localToWorld(new E.camera.position.constructor(0,0,0)); if(h!=null) t.y=h; else t.y+=0.6*(obj.scale.y||1); const e=obj.matrixWorld.elements, fx=e[8], fz=e[10], L=Math.hypot(fx,fz)||1, c=Math.cos(a), s2=Math.sin(a), dx=(fx*c+fz*s2)/L, dz=(fz*c-fx*s2)/L; window.view([t.x+dx*dist,t.y+0.1,t.z+dz*dist],[t.x,t.y,t.z]); };
       return 1; })()`);
     // the driver runs in chunks so each snap can be captured from outside
     const parts = driver.split(/(await snap\([^)]*\);?)/);

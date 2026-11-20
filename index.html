@@ -39,9 +39,21 @@
   body.legible #bar::before { content: attr(data-label); position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 2px 10px 2px 14px;
     background: rgba(0,0,0,.78); border-radius: 4px; font: bold 13px Arial, sans-serif; letter-spacing: .3em; color: #fff; }
   body.legible #toast { background: rgba(0,0,0,.78); padding: 6px 10px; border-radius: 6px; }
-  #breath { display: none; align-items: center; justify-content: center; flex-direction: column; top: 50%; bottom: auto; height: 180px;
-    font: 13px Arial, sans-serif; letter-spacing: .15em; color: #cfe6ff; }
-  #breath b { display: block; width: 60px; height: 60px; border: 2px solid #cfe6ff; border-radius: 50%; margin-bottom: 64px; }
+  /* the classroom orb: a ring round it that fills while your eyes rest on it, a dot where your eyes are, a line from it to the orb */
+  #gaze, #gazeDot, #gazeLine { position: fixed; left: 0; top: 0; pointer-events: none; display: none; z-index: 1; }
+  #gaze { border-radius: 50%; --p: 0%; --c: #ffe9b0; opacity: .55; transition: opacity .2s, filter .2s;
+    background: conic-gradient(var(--c) var(--p), #ffffff30 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px)); mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px)); }
+  #gaze.on { opacity: 1; filter: drop-shadow(0 0 6px var(--c)); }
+  #gaze.snap { --c: #ff8a7a; opacity: 1; }
+  #gazeDot { left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ffffffaa; box-shadow: 0 0 4px #000; }
+  #gazeLine { left: 50%; top: 50%; height: 2px; margin-top: -1px; background: linear-gradient(90deg, #ffffff22, #ffffffee); box-shadow: 0 0 3px #000000aa; transform-origin: 0 50%; }
+  /* BREAK FREE?: the one instruction line under the prompt, gone once a control has been tried */
+  #how { top: 31%; bottom: auto; height: auto; text-align: center; opacity: 0; transition: opacity 1.2s; }
+  #how.on { opacity: 1; }
+  @media (max-height: 480px) { #how { top: 37%; } }
+  #how:not(:empty) { left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: 88vw; padding: 6px 14px; border-radius: 5px;
+    background: #000000a8; color: #e8eef8; font: bold clamp(14px, 1.6vw, 19px) Arial, sans-serif; letter-spacing: .06em; }
   #choices { display: none; top: auto; bottom: 7%; flex-direction: column; align-items: center; gap: 8px; pointer-events: auto; }
   #choices button { font: inherit; font-size: clamp(15px, 1.8vw, 21px); color: #e8ecf3; background: #0b0d14cc; border: 1px solid #5a6680;
     padding: 9px 20px; min-width: 320px; max-width: 80vw; cursor: pointer; text-align: left; }
@@ -115,7 +127,8 @@
 <div id="fade" class="layer"></div>
 <div id="prompt" class="layer"></div>
 <div id="bar" class="layer" data-label="FOCUS"><i></i></div>
-<div id="breath" class="layer"><b></b><span></span></div>
+<div id="gaze"></div><div id="gazeDot"></div><div id="gazeLine"></div>
+<div id="how" class="layer"></div>
 <div id="sub" class="layer"></div>
 <div id="choices" class="layer"></div>
 <div id="hint" class="layer"></div>
@@ -143,7 +156,7 @@
     MOUSE look &nbsp;·&nbsp; W A S D walk &nbsp;·&nbsp; E interact &nbsp;·&nbsp; TAB field notes &nbsp;·&nbsp; P or ESC pause<br>
     Click the view to capture the mouse. Arrow keys also turn your head.
   </div>
-  <div id="build" style="font:11px Arial,sans-serif;color:#4a5266;margin-top:22px">v1.0.1 beta · build 147</div>
+  <div id="build" style="font:11px Arial,sans-serif;color:#4a5266;margin-top:22px">v1.0.2 beta · build 156</div>
 </div>
 
 <div id="notes" class="panel">
@@ -171,6 +184,7 @@
   <div id="creditsList"></div>
 </div>
 
+<script src="./js/compat.js"></script>
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
 <script type="module" src="./js/main.js"></script>
 </body>

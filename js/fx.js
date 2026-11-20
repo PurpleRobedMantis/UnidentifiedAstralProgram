@@ -814,6 +814,38 @@ export function makeJesterFace() {
   }));
 }
 export const PALACE_FACES = 4;
+// A jester face torn loose from the wall: the same face (FACE, faceDraw) on a quad of its own that flies at you. faceDraw
+// paints over a colour, so it is run over black and over white: what changes between the two is how much of the
+// background shows, which gives the face's own coverage (alpha) and colour. Only on this small quad, never in the palace.
+const FLYER_FRAG = `
+uniform float uT;
+uniform float uMood;
+uniform float uFade;
+uniform float uWarp;
+varying vec2 vUv;
+${COMMON}
+${FACE}
+void main(){
+  vec2 q = (vUv - 0.5)*vec2(5.0, 5.0) + vec2(0.0, 0.5);
+  q += faceWarp(q, uT)*uWarp;
+  vec4 jb = vec4(1.0, uMood, 0.0, 0.0);
+  float aa = max(fwidth(q.x), fwidth(q.y))*1.2;
+  vec3 c0 = faceDraw(vec3(0.0), q, jb, uT, aa);
+  vec3 c1 = faceDraw(vec3(1.0), q, jb, uT, aa);
+  float a = clamp(1.0 - (c1.g - c0.g), 0.0, 1.0);
+  vec3 col = a > 0.002 ? c0/a : vec3(0.0);
+  gl_FragColor = vec4(col, a*uFade);
+}`;
+// 1 m square; the face inside it is about 0.48 m wide and 0.6 tall (q spans 5 units over the quad), plumes reaching the top.
+// Drawn over everything (no depth test) so nothing in the hall can cut it as it comes in.
+export function makeFlyingJester() {
+  const m = new THREE.Mesh(plane(), new THREE.ShaderMaterial({
+    uniforms: { uT: { value: 0 }, uMood: { value: 1 }, uFade: { value: 0 }, uWarp: { value: 1 } },
+    vertexShader: VS_UV, fragmentShader: FLYER_FRAG, transparent: true, depthWrite: false, depthTest: false,
+  }));
+  m.renderOrder = 50; m.frustumCulled = false; m.visible = false;
+  return m;
+}
 // A place on the hall's own surfaces for a face to grow: a pier, a spandrel between two arches, or the vault, some way
 // ahead of the viewer and this side of the next cross-wall. Returns null when there is no room yet. (Constants match PALACE_FRAG.)
 export function palaceSpot(pu, pointing) {
@@ -951,7 +983,8 @@ export function prewarm(renderer, camera) {
   try {
     const s = new THREE.Scene();
     const p = makePortal();
-    s.add(makePalace(), makeJesterFace(), makeMandala(1), p.group, makeOrb(0), makeMotes(3));
+    const fj = makeFlyingJester(); fj.visible = true;
+    s.add(makePalace(), makeJesterFace(), fj, makeMandala(1), p.group, makeOrb(0), makeMotes(3));
     renderer.compile(s, camera);
   } catch (e) { console.warn('fx prewarm failed', e); }
 }

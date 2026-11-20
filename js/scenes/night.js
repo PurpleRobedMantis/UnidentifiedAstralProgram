@@ -3,6 +3,8 @@ import { THREE, lookToward, E, G, $, on, wait, until, tween, lerp, say, prompt, 
   setView, moveView, lookingAt, angleTo, aimAt, clearScene, discard, warm, t as tr } from '../engine.js';
 import { A } from '../audio.js';
 import { T, buildBedroom, makeGrey, stepGrey, makeMantis, idleMantis, makeHuman, makePlayerBody, aimGrey, idleGrey, holdGrey, gripGrey, pointGrey, makeWand, clearGreyArm, greyArmHits, GREY_GAIT, heldSegment } from '../models.js';
+import { loadClip, poseClip } from '../clips.js';
+import PUTDOWN from '../clips/grey-putdown.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const GRIP_K = 1; // a grey's fingers fully closed round the wand
@@ -329,7 +331,7 @@ export async function bedroom() {
   await tween(2.6, (k) => R.openPortal(k));
   note('doorway');
   A.greysIn(2.56, 6);   // laid out on the 2.0 s wait and the walk below (they cross the wall plane 0.56 s into it): change either and change this
-  await wait(2.0);      // build 130: 0.8 s before, lengthened (owner) so the roar builds longer before they come through
+  await wait(2.0);      // build 130: 0.8 s before, lengthened so the roar builds longer before they come through
 
   const greys = pre.greys;
   if (window.UAP) window.UAP.bed = { greys };   // for test harnesses
@@ -376,54 +378,81 @@ export async function bedroom() {
   await wait(1.2);
 
   // ---- BREAK FREE? ----
+  // No interface but one line: the moment is felt through the body. The hum of the held hands swells and fades in a slow
+  // rhythm (in for IN seconds, out for OUT); holding SHIFT draws a breath (you hear it, and the view lifts with your
+  // chest), letting go breathes out. Breathing with the hum calms you: fear, and with it the heartbeat, the dark edges and
+  // the tremor, come down. Each SPACE press is a twitch in the right hand on the covers, and as the struggle builds the
+  // arm starts to come up off them (fistLift), sinking back as it fades; when it wins the fist comes the rest of the way.
+  // A grey talks the first breaths through ("Breathe in..." / "...and out.") until you are with it, you struggle, or three
+  // breaths have gone by. One instruction line under the prompt goes once either control has been tried.
   prompt('BREAK FREE?');
-  hint('SPACE to struggle   ·   or breathe: hold SHIFT while the ring grows, release while it shrinks');
-  const br = $('breath'); br.style.display = 'flex';
+  // on a phone the line under the prompt says it all; the long hint would wrap over the voice talking the breath through
+  hint(E.touch ? '' : 'SPACE to struggle   ·   or breathe: hold SHIFT as the hum swells, let go as it fades');
+  const how = $('how');
+  how.textContent = tr(E.touch ? 'Hold BREATHE to breathe. Tap STRUGGLE to fight.' : 'Hold SHIFT to breathe. Tap SPACE to fight.');
+  how.classList.add('on'); let howGone = -1;
+  E.breathing = true; E.nudge = { breathe: false, struggle: false };
   let struggle = 0, calm = 0, t = 0, wasHeld = false, air = null;
-  const IN = 3.5, OUT = 4.5, GRACE = 0.4; // seconds the ring grows, shrinks, and the slack allowed at each turn
-  const ease = (x) => 0.5 - 0.5 * Math.cos(Math.PI * x);
+  const IN = 3.5, OUT = 4.5, GRACE = 0.6, LEAD = 3.4; // seconds the hum swells, fades, the slack allowed at each turn, and the wait for "Be not afraid."
+  let lung = 0, camLift = 0, pitchLift = 0, twitch = 0, lastIn = null, coached = 0, idle = 0;
   G.fear = Math.max(G.fear, 0.8); // the heart is hammering when this starts; breathing brings it down
   say('Be not afraid.', 'them', 3.2);
   const startZ = greys.map((g) => g.position.z);
   const result = await new Promise((res) => {
     const off = on((dt) => {
       t += dt;
-      if (E.just.has('Space')) { struggle += 0.05; G.fear += 0.03; E.panic = Math.min(1, (E.panic || 0) + 0.12); A.noise(0.07, { g: 0.12, f: 180, q: 1 }); }
+      const held = !!(E.keys.ShiftLeft || E.keys.ShiftRight), pressed = E.just.has('Space');
+      if (pressed) { struggle += 0.05; twitch = 1; G.fear += 0.03; E.panic = Math.min(1, (E.panic || 0) + 0.12); A.noise(0.07, { g: 0.12, f: 180, q: 1 }); }
       struggle = Math.max(0, struggle - dt * 0.09);
       E.shake = 0.012 + struggle * 0.05 - calm * 0.008;
-      // the ring grows for the whole of IN and shrinks for the whole of OUT, so the label and the ring always agree
-      const u = t % (IN + OUT), inhale = u < IN;
-      const size = inhale ? ease(u / IN) : 1 - ease((u - IN) / OUT);
-      const turn = Math.min(u, Math.abs(u - IN), IN + OUT - u) < GRACE;
-      const held = !!(E.keys.ShiftLeft || E.keys.ShiftRight);
-      br.firstElementChild.style.transform = `scale(${(1 + size * 1.3).toFixed(3)})`;
-      br.firstElementChild.style.background = held ? '#cfe6ff33' : 'transparent';
-      br.lastElementChild.textContent = tr(inhale ? (E.touch ? 'IN — HOLD BREATHE' : 'IN — HOLD SHIFT') : 'OUT — RELEASE');
-      // you hear your own breath follow the key, not the ring
+      // the rhythm: before LEAD it rests (breathing out); then IN swelling, OUT fading
+      const u = t < LEAD ? IN + 0.01 : (t - LEAD) % (IN + OUT), inhale = u < IN;
+      const turn = t >= LEAD && Math.min(u, Math.abs(u - IN), IN + OUT - u) < GRACE;
+      if (t >= LEAD && inhale !== lastIn) {
+        lastIn = inhale;
+        vib.set(inhale ? 44 : 38, inhale ? 0.2 : 0.1, inhale ? IN : OUT);   // the hum is the rhythm: up and louder in, down and softer out
+        if (coached < 3 && calm < 0.3 && struggle < 0.1) { say(inhale ? 'Breathe in...' : '...and out.', 'them', (inhale ? IN : OUT) - 0.4); if (!inhale) coached++; }
+      }
+      // the instruction goes once either control has been tried
+      if (howGone < 0 && (held || pressed)) howGone = t;
+      if (howGone >= 0 && t - howGone > 1.5) how.classList.remove('on');
+      // your chest: fills while the key is held, empties when it is let go; the view rises and tips a little with it
+      lung = held ? Math.min(1, lung + dt / IN) : Math.max(0, lung - dt / OUT);
+      const ly = 0.014 * Math.sin(lung * Math.PI / 2), lp = 0.02 * Math.sin(lung * Math.PI / 2);
+      E.camera.position.y += ly - camLift; E.pitch += lp - pitchLift; camLift = ly; pitchLift = lp;
+      // the right hand: a twitch at each press, the arm coming up off the covers as the struggle builds
+      twitch = Math.max(0, twitch - dt * 6);
+      me.userData.fistLift(Math.min(0.45, struggle * 0.45 + twitch * 0.06));
+      // you hear your own breath follow the key
       if (held !== wasHeld) {
         if (air) air.stop(0.2);
         air = (held || t > 0.5) ? A.breath(held, held ? IN : OUT, G.fear) : null;
-        wasHeld = held;
       }
+      // phones: the real buttons pulse while a breath is being talked through, or after a while with nothing pressed
+      idle = held !== wasHeld || pressed || held ? 0 : idle + dt;
+      wasHeld = held;
+      E.nudge.breathe = (coached < 3 && calm < 0.3 && t >= LEAD && inhale && !held) || idle > 6; E.nudge.struggle = idle > 12;
       if (struggle >= 0.05) calm = Math.max(0, calm - dt * 0.2);
-      else if ((held === inhale || turn) && (held || calm > 0)) { calm += dt / 16; G.fear -= dt * 0.04; }
-      else calm = Math.max(0, calm - dt / 12);
-      if (calm === 0) G.fear += dt * 0.012;
-      bar(Math.max(struggle, calm));
-      $('bar').firstChild.style.background = calm > struggle ? '#9fd0ff' : '#fff';
+      else if (t < LEAD) { if (!held) G.fear -= dt * 0.01; }
+      else if ((held === inhale || turn) && (held || calm > 0)) { calm += dt / 13; G.fear -= dt * 0.04; }   // 13 s of breathing in time (16 before build 156)
+      else calm = Math.max(0, calm - dt / 16);   // drains over 16 s when out of time (12 before build 156)
+      if (calm === 0 && t >= LEAD) G.fear += dt * 0.012;
       for (let i = 0; i < greys.length; i++) greys[i].position.z = lerp(startZ[i], -0.75, Math.min(1, t / 28));
       const done = struggle >= 1 ? 'fight' : calm >= 1 ? 'calm' : t > 28 ? 'afraid' : null;
       if (done) { off(); if (air) air.stop(0.4); res(done); }
     });
   });
-  prompt(''); hint(''); bar(null); br.style.display = 'none';
+  prompt(''); hint(''); how.classList.remove('on'); E.breathing = false; E.nudge = null;
+  E.camera.position.y -= camLift; E.pitch -= pitchLift; vib.set(38, 0.13, 0.6);
+  const liftFrom = Math.min(0.45, struggle * 0.45);   // where the arm got to (the fight takes it on from there)
+  if (result !== 'fight') tween(0.6, (k) => me.userData.fistLift(liftFrom * (1 - k)));
   G.path = result;
 
   if (result === 'fight') {
     note('struggle');
     E.limits = null; E.shake = 0.02;
     say('A fist lifts off the sheet. Your voice comes back as a croak.'); A.croak();
-    tween(0.8, (k) => me.userData.fistLift(k));
+    tween(0.8, (k) => me.userData.fistLift(liftFrom + (1 - liftFrom) * k));   // on from wherever the struggle had got it
     moveView(1.1, { pos: V(0, 1.2, -1.15), pitch: 0, yaw: Math.PI }); A.rustle(1.0, 1.3);   // bolt upright: the covers drag
     // How they take it (build 123; they used to slide back 2 cm a frame, a sudden glide away): in the accounts the beings
     // are not frightened off. They stop dead, a startled stillness, a look passes between them, and then they carry on,
@@ -1068,7 +1097,7 @@ export async function exam() {
   table(-2.3);   // an empty table on your left, the same as yours and the man's (its floor shadow is in EX_FLOOR)
   // a steel tray on a stand off the foot-left corner of your table, with a very long chrome probe lying on it.
   // The probe's business end is its local -y; the ringed grip is at its +y end.
-  const tray = new THREE.Group(); tray.position.set(-0.95, 0, -1.32); g.add(tray);
+  const tray = new THREE.Group(); tray.position.set(-0.95, 0, -1.47); g.add(tray);   // 15 cm further from the table end than before build 149, so a grey walks straight between them
   {
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.02, 0.8, 10), steel); leg.position.y = 0.4;
     const plate = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.012, 0.16), steel); plate.position.y = 0.806;
@@ -1424,7 +1453,7 @@ export async function exam() {
       // still, the hand nearer your head had to reach across its own chest while your legs were flat)
       { const z = lerp(spotL.z, -0.14, legK), w = 0.6 * Math.sin(Math.PI * legK); gL.position.z = gR.position.z = z; stepGrey(gL, E.time * GREY_GAIT, w); stepGrey(gR, E.time * GREY_GAIT + Math.PI, w); }
       idleGrey(gL, t); idleGrey(gR, t + 2);   // breathing first: it turns the hands, which the grip then sets
-      // each takes one leg in both hands, one above it and one below (owner, build 124): the hand by the ankle over the top
+      // each takes one leg in both hands, one above it and one below (build 124): the hand by the ankle over the top
       // of the shin, fingers round the inside; the hand nearer your head under the calf, palm up, fingers curling up round
       // the inside. A hand cannot go under a leg lying on the table, so the top hand takes hold first and starts the lift,
       // and the other slides in under the calf from the outside once it is clear of the table (k1 follows the lift, and
@@ -1451,13 +1480,12 @@ export async function exam() {
     const holdProbe = () => { instr.scale.setScalar(1 / gP.scale.x); gripGrey(gP, 'R', 1, instr); };
     const pa = V(0, 0, 0), pb = V(0, 0, 0), pick = V(0, 0, 0), low = restW.clone().setY(restW.y + 0.03);   // 3 cm: at 2.2 the fingertips under it touched the plate
     const probeTo = (w, d) => { for (let i = 0; i < 3; i++) { fistTo(pa, d); gripGrey(gP, 'R', 1); gP.updateMatrixWorld(true); instr.getWorldPosition(pb); pa.add(pb.subVectors(w, pb)); } aimGrey(gP, restW, 1); };
-    const traySpot = V(-1.03, 0, -0.99), footSpot = V(0, 0, -1.27), footR = 0;   // at the foot of the table, square on, between your feet (9 cm nearer since build 125: holding the probe by its rings puts the tip 9 cm nearer the fist, and the arm was already at full stretch)
-    const aroundTray = [V(-1.55, 0, -1.1), V(-1.35, 0, -1.85), V(-0.2, 0, -1.7)];   // the tray stand spans x -1.21..-0.69, z -1.40..-1.24
+    const traySpot = V(-1.03, 0, -1.14), footSpot = V(0, 0, -1.27), footR = 0;   // at the foot of the table, square on, between your feet (9 cm nearer since build 125: holding the probe by its rings puts the tip 9 cm nearer the fist, and the arm was already at full stretch)
     const mePos = me.position.clone();
     // the fetcher sets off first; the other two come to your legs
     lookToward(V(-0.6, 1.05 + TY, -0.7), 1.6);
     await Promise.all([
-      walkPath(gP, [V(-0.95, 0, -0.75), traySpot], Math.PI, () => restW),
+      walkPath(gP, [V(-0.95, 0, -0.9), traySpot], Math.PI, () => restW),
       (async () => { await wait(0.5); await walkPath(gL, [V(-0.74, 0, 0.3), spotL], Math.PI / 2, () => mePos); })(),
       walkPath(gR, [spotR], -Math.PI / 2, () => E.camera.position),
     ]);
@@ -1478,11 +1506,11 @@ export async function exam() {
         // tray as the hand closed (build 123).
         const tips0 = V(0, 0, 0), over = V(0, 0, 0), fv0 = V(0, 0, 0), pickW = V(0, 0, 0), pickQ = new THREE.Quaternion(), pq0 = new THREE.Quaternion(), hpq = new THREE.Quaternion();
         {
-          const p0 = instr.position.clone(), q0 = instr.quaternion.clone(), arm = [uP.armR, uP.foreR, uP.handR], aq = arm.map((o) => o.quaternion.clone());
+          const p0 = instr.position.clone(), q0 = instr.quaternion.clone(), arm = [uP.armR, uP.foreR, uP.handR, uP.fingersR, uP.tipsR, uP.thumbR].filter(Boolean), aq = arm.map((o) => o.quaternion.clone());
           holdProbe(); pa.copy(grip);
           for (let i = 0; i < 4; i++) probeTo(low, probeDir);
           pick.copy(pa); gP.updateMatrixWorld(true); uP.handR.getWorldPosition(pickW); uP.handR.getWorldQuaternion(pickQ); tray.add(instr); instr.position.copy(p0); instr.quaternion.copy(q0); instr.scale.setScalar(1); uP.gripAxisR = null; uP.heldR = null;
-          arm.forEach((o, i) => o.quaternion.copy(aq[i])); fLive = false;   // the arm back where it hung; the solver starts from there
+          arm.forEach((o, i) => o.quaternion.copy(aq[i])); fLive = false;   // the arm and fingers back as they hung; the solver starts from there (build 150: the fingers stayed closed from the dry run for one frame, the tips 7 mm into its own knee)
           gP.updateMatrixWorld(true); uP.handR.getWorldPosition(tips0); over.copy(pickW); over.y += 0.15;
         }
         // the reach comes down onto it from above (a curve through a point 15 cm over the grip), the hand turning as it comes
@@ -1515,19 +1543,19 @@ export async function exam() {
         // from where the lift ends into the carrying pose before it sets off (the walk used to start in the carrying pose:
         // the probe's tip moved 54 cm in one frame)
         { const fA = f0.clone(), tA = t0.clone(), cf2 = V(0, 0, 0), ct2 = V(0, 0, 0), fm = V(0, 0, 0), tm = V(0, 0, 0);
-          await tween(0.7, (k) => { local(uP.root, 0.18, 0.95, 0.24, cf2); local(uP.root, 0.3, 1.9, 0.85, ct2); holdAt(fm.lerpVectors(fA, cf2, k), tm.lerpVectors(tA, ct2, k)); aimGrey(gP, tip(), 1); }); }
+          await tween(0.7, (k) => { local(uP.root, 0.2, 0.95, 0.24, cf2); local(uP.root, 0.3, 1.9, 0.85, ct2); holdAt(fm.lerpVectors(fA, cf2, k), tm.lerpVectors(tA, ct2, k)); aimGrey(gP, tip(), 1); }); }
       })(),
     ]);
     // round the foot of the table, the probe carried upright and out in front
     const cf = V(0, 0, 0), ct = V(0, 0, 0);
-    const carry = () => holdAt(local(uP.root, 0.18, 0.95, 0.24, cf), local(uP.root, 0.3, 1.9, 0.85, ct));   // in its body's frame, so the fist rocks with the waddle instead of the chest rocking into the arm
+    const carry = () => holdAt(local(uP.root, 0.2, 0.95, 0.24, cf), local(uP.root, 0.3, 1.9, 0.85, ct));   // in its body's frame, so the fist rocks with the waddle instead of the chest rocking into the arm
     watchL = watchR = () => tip();
-    // round the far side of the tray (build 146: the straight line from beside it went through its stand, chest through the
-    // plate and post, knees through the post and base)
-    await walkPath(gP, [...aroundTray, footSpot], footR, () => tip(), carry);
+    // straight between the stand and the table's corner (build 149: it went round the far side of the stand; with the stand
+    // 15 cm further out the straight line clears the plate and the table's rim)
+    await walkPath(gP, [footSpot], footR, () => tip(), carry);
     // lines it up and brings it in, slowly, nearly all the way
     say('The third comes round to the foot of the table with a long chrome probe, and lines it up...', 'self', 4.5);
-    // Build 146 (owner: "line it up with their ass more and get closer to ass"): your backside is low between your raised legs
+    // Build 146: aimed lower and closer. Your backside is low between your raised legs
     // (measured: the middle's rearmost point at about y 0.63, z 0.05; the thighs are above y 0.84 from z -0.05 down the table),
     // so the probe comes in low and level along the table between your legs and stops a few centimetres short of it. It was
     // held up by your feet, its tip 53 cm short and 25 cm high. It is placed by the probe itself (its ring end to a point, the
@@ -1577,11 +1605,11 @@ export async function exam() {
     // into the carrying pose, the shaft aimed from the wrist the way the carry aims it (aimed from the fist, it snapped 7 cm
     // as the walk began)
     { const cf3 = V(0, 0, 0), ct3 = V(0, 0, 0), d3 = V(0, 0, 0), lk3 = V(0, 0, 0), pA = pa.clone();
-      await tween(1.1, (k) => { lean(LEAN_A * (1 - k)); local(uP.root, 0.18, 0.95, 0.24, cf3); local(uP.root, 0.3, 1.9, 0.85, ct3); look(lk3.lerpVectors(tip(), restW, k), 1 - 0.2 * k); fistTo(fv.lerpVectors(pA, cf3, k), (h, out) => out.copy(DA).lerp(d3.subVectors(ct3, h).normalize(), k).normalize()); gripGrey(gP, 'R', 1); }); }
+      await tween(1.1, (k) => { lean(LEAN_A * (1 - k)); local(uP.root, 0.2, 0.95, 0.24, cf3); local(uP.root, 0.3, 1.9, 0.85, ct3); look(lk3.lerpVectors(tip(), restW, k), 1 - 0.2 * k); fistTo(fv.lerpVectors(pA, cf3, k), (h, out) => out.copy(DA).lerp(d3.subVectors(ct3, h).normalize(), k).normalize()); gripGrey(gP, 'R', 1); }); }
     lean(0);   // its eyes move to the tray as it goes (the walk looks there: the head snapped, and the arm, kept clear of the head, jumped with it)
     const lower = (async () => { await tween(2.0, (k) => { legK = 1 - k; }); await tween(0.6, (k) => { handK = 1 - k; }); holding = false; legs.rotation.x = legs0; ST.set(0, 0); })();
     watchL = watchR = null;
-    await walkPath(gP, [...aroundTray.slice().reverse(), traySpot], Math.PI, () => restW, carry);
+    await walkPath(gP, [traySpot], Math.PI, () => restW, carry);
     await lower;
     moveView(1.4, { pos: cam0, pitch: 0.35 });
     // Down on the tray where it came from (build 123: the hand used to sink to the tray's grip point while the shaft was
@@ -1590,25 +1618,52 @@ export async function exam() {
     // the fist solved each frame by where the probe lands. It is turned level 15 cm above its place, lowered straight
     // down until it is just clear of the tray (2.2 cm: the fingers are under it), the hand opens and it settles; then the
     // hand lifts clear before the arm drops.
-    pa.copy(local(gP, 0.18, 0.95, 0.24, V(0, 0, 0)));
+    pa.copy(local(gP, 0.2, 0.95, 0.24, V(0, 0, 0)));
     const want = V(0, 0, 0), dir0 = V(0, 0, 0), dirK = V(0, 0, 0);
     const w0 = instr.getWorldPosition(V(0, 0, 0)), above = restW.clone().setY(restW.y + 0.15);
     instr.localToWorld(dir0.set(0, -1, 0)).sub(w0).normalize();   // the way the business end points now
     // turning it level, the probe is carried out in front of it and the shaft swings forward on the way (straight from upright
     // to level the shaft passed its own head, and the fist, turning round the probe close to its chest, went into it)
     const fwdP = V(Math.sin(gP.rotation.y), 0, Math.cos(gP.rotation.y));
-    await tween(0.9, (k) => { probeTo(want.lerpVectors(w0, above, k).addScaledVector(fwdP, 0.14 * Math.sin(Math.PI * k)), dirK.lerpVectors(dir0, probeDir, k).addScaledVector(fwdP, 0.8 * Math.sin(Math.PI * k)).normalize()); }, (k) => k);
+    // Build 148 pilot: the body is a keyframed clip made in Blender (anim/grey-putdown.blend, js/clips/grey-putdown.js): it
+    // leans in from the hips over the tray as the probe goes down, the free arm hanging, and straightens as the probe arm
+    // drops. The clip's marks set the timing of each step below. Every frame the clip poses the body first; then the
+    // probe arm is solved on top of it, as before, while it holds or is near the probe; from 'clear' the clip's own drop
+    // to hang takes the arm over from wherever the solver left it. The head is aimed (aimGrey) and the lean taken off it.
+    const PD = loadClip(PUTDOWN), mk = PD.marks, pd0 = E.time, ARM = { armR: 1, foreR: 1, handR: 1 };
+    const pdT = () => E.time - pd0;
+    // each step runs until the clip reaches its mark (steps run whole frames, so fixed lengths drifted a few frames behind the clip)
+    const till = (m) => Math.max(1 / 30, m - pdT());
+    const body = () => poseClip(gP, PD, pdT(), sm2(pdT() / 0.35), (j) => !ARM[j]);
+    const unLean = (k = 1) => { uP.neck.rotation.x -= uP.root.rotation.x * k; };
+    await tween(till(mk.level), (k) => { body(); probeTo(want.lerpVectors(w0, above, k).addScaledVector(fwdP, 0.14 * Math.sin(Math.PI * k)), dirK.lerpVectors(dir0, probeDir, k).addScaledVector(fwdP, 0.8 * Math.sin(Math.PI * k)).normalize()); unLean(); }, (k) => k);
     // and the fingers open part way as it comes down, so they are not under it at the tray
-    await tween(0.6, (k) => { probeTo(want.lerpVectors(above, low, k), probeDir); gripGrey(gP, 'R', 1 - 0.65 * sm2((k - 0.3) / 0.7)); }, (k) => k);
+    await tween(till(mk.down), (k) => { body(); probeTo(want.lerpVectors(above, low, k), probeDir); unLean(); gripGrey(gP, 'R', 1 - 0.65 * sm2((k - 0.3) / 0.7)); }, (k) => k);
     tray.attach(instr); uP.gripAxisR = null;
     const fromP = instr.position.clone(), fromQ = instr.quaternion.clone(), restP = V(-0.33, 0.8215, 0), restQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, Math.PI / 2));
-    await tween(0.35, (k) => { instr.position.lerpVectors(fromP, restP, k); instr.quaternion.slerpQuaternions(fromQ, restQ, k); gripGrey(gP, 'R', 0.35 * (1 - k)); });   // already part open from the lowering
+    // the hand stays where it let go (held in the world while the body moves under it), turned as it was
+    const hq = new THREE.Quaternion(), hpq2 = new THREE.Quaternion(), wr0 = V(0, 0, 0), wr1 = V(0, 0, 0);
+    gP.updateMatrixWorld(true); uP.handR.getWorldQuaternion(hq); uP.handR.getWorldPosition(wr0);
+    const handStill = () => { gP.updateMatrixWorld(true); uP.handR.parent.getWorldQuaternion(hpq2).invert(); uP.handR.quaternion.copy(hpq2.multiply(hq)); return null; };
+    const handAt = (p) => { gP.updateMatrixWorld(true); fPole.set(1, -0.35, -0.55).normalize().applyQuaternion(uP.root.getWorldQuaternion(fQ)); clearGreyArm(gP, 'R', p, fPole, handStill); handStill(); };
+    await tween(till(mk.release), (k) => { body(); handAt(wr0); aimGrey(gP, restW, 1); unLean(); instr.position.lerpVectors(fromP, restP, k); instr.quaternion.slerpQuaternions(fromQ, restQ, k); gripGrey(gP, 'R', 0.35 * (1 - k)); });   // already part open from the lowering
     A.tone(2900, 0.05, { g: 0.02 }); A.tone(3900, 0.04, { g: 0.01 }); pound(); E.shake = 0;
-    const up0 = pa.clone(), up1 = pa.clone().setY(pa.y + 0.1);
-    await tween(0.35, (k) => { fistTo(want.lerpVectors(up0, up1, k), null); gripGrey(gP, 'R', 0); });
-    // the arm comes down to hang: each joint turned back from where it is (a fresh reach solve here could pick another elbow)
-    { const a = [uP.armR, uP.foreR, uP.handR], q0 = a.map((o) => o.quaternion.clone()), id = new THREE.Quaternion();
-      await tween(1.0, (k) => { a.forEach((o, i) => o.quaternion.slerpQuaternions(q0[i], id, k)); }); }
+    // the hand lifts 10 cm straight up off the probe, still turned as it was (build 147 laid the hand flat in one frame
+    // here: the fingertips jumped 8.8 cm)
+    await tween(till(mk.clear), (k) => { body(); handAt(wr1.copy(wr0).setY(wr0.y + 0.1 * sm2(k))); gripGrey(gP, 'R', 0); aimGrey(gP, restW, 1); unLean(); });
+    // the arm comes down to hang: from where the solver left it into the clip's drop (shoulder first, elbow and wrist
+    // trailing), and the head turns from the tray to you, ready for the walk home (it snapped 9 cm as the walk began)
+    { const a = [uP.armR, uP.foreR, uP.handR], q0 = a.map((o) => o.quaternion.clone()), nk = V(0, 0, 0);
+      await tween(till(PD.duration), (k) => {
+        body(); a.forEach((o, i) => o.quaternion.copy(q0[i]));
+        poseClip(gP, PD, pdT(), sm2(k), (j) => !!ARM[j]);   // over the whole drop: faster, the fingertips went 8 cm a frame
+        // the two aims are blended, not one aim at a point moving from the tray to you: that line passes through its own head and
+        // the aim swung 3 cm in a frame
+        const kl = sm2(k * 1.6); aimGrey(gP, restW, 1); unLean(); nk.set(uP.neck.rotation.x, uP.neck.rotation.y, 0);
+        aimGrey(gP, E.camera.position, 0.8); uP.neck.rotation.x = lerp(nk.x, uP.neck.rotation.x, kl); uP.neck.rotation.y = lerp(nk.y, uP.neck.rotation.y, kl);
+      }); }
+    // the clip ends upright: nothing of the lean may stay (the walk sets the root's sway and turn, not its tip)
+    uP.root.quaternion.identity(); uP.root.position.set(0, 0, 0);
     E.limits = lim0; E.mode = 'look';
     await Promise.all([
       walkPath(gP, [homeP[0]], homeR[0], () => E.camera.position),

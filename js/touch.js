@@ -8,6 +8,8 @@ const css = `
   .tc.btnT { display: none; align-items: center; justify-content: center; border: 1px solid #cfe6ff88; border-radius: 50%; background: #0a0d1466;
     color: #dfe9ff; font: 12px Arial, sans-serif; letter-spacing: .08em; text-align: center; }
   .tc.btnT.down { background: #cfe6ff44; }
+  .tc.btnT.nudge { animation: tcNudge .8s ease-in-out infinite; }
+  @keyframes tcNudge { 50% { box-shadow: 0 0 0 5px #cfe6ff55, 0 0 22px #cfe6ff; background: #2a3a5599; } }
   #tcStick { left: 22px; bottom: 26px; width: 120px; height: 120px; border: 1px solid #cfe6ff55; border-radius: 50%; background: #0a0d1444; display: none; }
   #tcStick i { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px; border-radius: 50%; background: #cfe6ff66; }
   #tcAct { right: 26px; bottom: 34px; width: 84px; height: 84px; }
@@ -81,9 +83,10 @@ function build() {
   // show only what the moment needs
   E.sys.add(() => {
     const playing = $('title').style.display === 'none' && $('endcard').style.display !== 'block';
-    const breathing = $('breath').style.display === 'flex';
+    const breathing = !!E.breathing;
     stick.style.display = playing && E.mode === 'walk' ? 'block' : 'none';
     space.style.display = shift.style.display = playing && breathing ? 'flex' : 'none';
+    shift.classList.toggle('nudge', !!(breathing && E.nudge && E.nudge.breathe)); space.classList.toggle('nudge', !!(breathing && E.nudge && E.nudge.struggle));
     focus.style.display = playing && E.gazeAt && !E.paused ? 'flex' : 'none'; if (!E.gazeAt) E.steady = false;
     act.style.display = playing && E.canAct && !E.paused && !E.gazeAt && !breathing ? 'flex' : 'none';
     pause.style.display = notes.style.display = playing && $('notes').style.display !== 'block' ? 'flex' : 'none';
@@ -99,9 +102,15 @@ function build() {
 }
 
 export function initTouch() {
-  addEventListener('touchstart', () => {
+  const start = () => {
     if (on) return; on = true;
     E.wantLock = false; E.touch = true;
     build();
-  }, { passive: true, capture: true });
+  };
+  addEventListener('touchstart', start, { passive: true, capture: true });
+  // a phone or tablet (touch is its main pointer) gets the touch controls and touch wording from the start, so the title
+  // screen never shows the keyboard help on it; a laptop with a touchscreen still waits for its first touch
+  let phone = false;
+  try { phone = navigator.maxTouchPoints > 0 && matchMedia('(pointer:coarse)').matches && !matchMedia('(any-pointer:fine)').matches; } catch (_) {}
+  if (phone) start();
 }

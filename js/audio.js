@@ -15,6 +15,16 @@ function track(a, b, t0, t1, exp) {
 export const RISE_SLOW = 1;
 // developer speed-up: sustained sounds (drones, rises, the carrier wave) ramp in game time, so they keep pace with the scene
 const sp = (s) => s / (A.speed || 1);
+// crowd voices (murmur, whisper, cackle, mock): at most CROWD of them start in any real second. Scenes call them in game
+// time, so at a developer speed-up they came several times as fast (jester hall at 8x: about 10x the sound sources a
+// real second) until the browser's audio thread fell behind and the sound cut out for most of a minute.
+const CROWD = 12, crowdAt = [];
+const crowded = () => {
+  const now = performance.now();
+  while (crowdAt.length && now - crowdAt[0] > 1000) crowdAt.shift();
+  if (crowdAt.length >= CROWD) return true;
+  crowdAt.push(now); return false;
+};
 export const A = {
   speed: 1,
   get muted() { return muted; },
@@ -130,7 +140,7 @@ export const A = {
   },
   // A sly, breathy whisper near one ear: a run of soft sibilant syllables. pan -1 (left) to 1 (right).
   whisper(pan = (Math.random() * 2 - 1) * 0.9, loud = 1) {
-    if (!ctx) return;
+    if (!ctx || crowded()) return;
     let t = ctx.currentTime + 0.02;
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(); if (p.pan) p.pan.value = pan; p.connect(master);
     const syll = 3 + Math.floor(Math.random() * 6);
@@ -187,7 +197,7 @@ export const A = {
   },
   // A djinn at your ear: a breathy voice-like murmur (noise through two moving vowel formants, in syllables), sliding across the head.
   murmur(pan = (Math.random() * 2 - 1) * 0.9, loud = 1) {
-    if (!ctx) return;
+    if (!ctx || crowded()) return;
     let t = ctx.currentTime + 0.02;
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(); p.connect(master);
     const syll = 5 + Math.floor(Math.random() * 9), total = syll * 0.17;
@@ -211,7 +221,7 @@ export const A = {
   },
   // Laughter that is not quite a throat: a run of "ha"s that speeds up and climbs or falls, with a metallic ring under it and an echo.
   cackle(pan = (Math.random() * 2 - 1) * 0.8, loud = 1) {
-    if (!ctx) return;
+    if (!ctx || crowded()) return;
     let t = ctx.currentTime + 0.02;
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(); if (p.pan) p.pan.value = pan;
     const echo = ctx.createDelay(0.6); echo.delayTime.value = 0.21; const eg = ctx.createGain(); eg.gain.value = 0.35;
@@ -335,7 +345,7 @@ export const A = {
   // A low, slow, mocking laugh: "heh... heh... heh-heh-haaa", a deep voiced throat through vowel formants, falling in pitch,
   // with breath on each syllable and a dark echo behind it. pan -1 (left) to 1 (right).
   mock(pan = (Math.random() * 2 - 1) * 0.8, loud = 1) {
-    if (!ctx) return;
+    if (!ctx || crowded()) return;
     let t = ctx.currentTime + 0.02;
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(); if (p.pan) p.pan.value = pan;
     const echo = ctx.createDelay(1); echo.delayTime.value = 0.33; const eg = ctx.createGain(); eg.gain.value = 0.3; const el = ctx.createBiquadFilter(); el.type = 'lowpass'; el.frequency.value = 1100;
@@ -357,6 +367,10 @@ export const A = {
       v.connect(p); o.start(t); o.stop(t + d + 0.05); s.start(t, Math.random()); s.stop(t + d + 0.05);
       f0 *= 1.07; t += last ? d : gap; gap = Math.max(0.08, gap * 0.85);
     }
+    // the echo feeds back into itself, so it never quite reaches silence and the browser keeps running it: close the
+    // loop 2 s after the last syllable (about six repeats, the last one 30 dB down) and disconnect it all
+    eg.gain.setValueAtTime(0.3, t + 2); eg.gain.linearRampToValueAtTime(0, t + 2.4);
+    setTimeout(() => { for (const nd of [p, echo, el, eg]) try { nd.disconnect(); } catch (_) {} }, (t + 2.6 - ctx.currentTime) * 1000);
   },
   // One tone in the left ear, another in the right. The ear hears the difference between them as a slow beat.
   // Returns { diff(hz), level(gain, seconds), stop(seconds) }.
@@ -549,7 +563,7 @@ export const A = {
   // Exam room: the eye on its stalk stops over your face, reads you and lets go. Cold and clinical, like hospital
   // equipment: a soft heavy magnetic clunk as it locks, a cold electrical hum that swells while it reads (two close
   // pitches beating, through a filter that opens and closes). Lasts about 1.4 s, the length of the colour change.
-  // Build 126: no air or noise layers at all (owner: "get rid of swishing noises when scanner locks"). The puff of air
+  // Build 126: no air or noise layers at all. The puff of air
   // on the clunk and the scan-bar sweep across and back are gone. Do not add noise sweeps back to this cue.
   scanLock() {
     if (!ctx) return;
@@ -565,8 +579,8 @@ export const A = {
       for (const [fr, ty] of [[110, 'sawtooth'], [111.3, 'sawtooth'], [220.4, 'square']]) { const o = ctx.createOscillator(); o.type = ty; o.frequency.value = fr; o.connect(f); o.start(t); o.stop(t + 1.4); }
     }
   },
-  // Bedclothes moving, as you sit up in bed (no flop) or drag the covers off (flop: the covers land). The owner picked
-  // this from every version tried (build 111 developer menu): build 106's soft low drag of the covers, with no strokes.
+  // Bedclothes moving, as you sit up in bed (no flop) or drag the covers off (flop: the covers land). Build 106's soft
+  // low drag of the covers, with no strokes, chosen from every version tried (build 111 developer menu).
   rustle(d = 1.2, g = 1, { flop = false } = {}) {
     if (!ctx) return;
     const t = ctx.currentTime + 0.02;
@@ -618,8 +632,7 @@ export const A = {
   // (deep creaks from the wall, the window rattling in its frame), the air is dragged out towards the wall, a low growl
   // beats against itself and climbs, the electrics overload and sputter, then
   // the pressure slams (ears), and a low unsteady roar is left hanging in the room. d = how long it takes to open.
-  // Build 117: the wall creaks are off (creaks: true brings them back): the owner identified them, from the developer sound
-  // list, as the "generic slapping whoosh" they disliked. The tear, wrongly removed in build 115, is back.
+  // Build 117: the wall creaks are off (creaks: true brings them back). The tear, removed in build 115, is back.
   // only: 'growl' | 'creaks' | 'rattle' | 'air' | 'electrics' | 'tear' | 'slam' | 'roar' plays one layer alone (sound list).
   // Levels measured layer by layer offline (build 100): every layer peaks 3-11 dB under the whole; re-measure if changed.
   portal(d = 2.6, { only = null, creaks = false } = {}) {
@@ -687,7 +700,7 @@ export const A = {
       jag(v, open + 0.3, open + 5.5, 0.09, 0.4, 1, (k) => 0.8 * (1 - k) ** 1.6); v.gain.setValueAtTime(0.0001, open + 5.6);
       s.connect(b); b.connect(v); v.connect(master); s.start(open, R()); s.stop(open + 5.7); }
   },
-  // ---- beings coming through the doorway: ethereal, not physical (owner, build 115: "scaryish ethereal cool") ----
+  // ---- beings coming through the doorway: ethereal, not physical ----
   // Shared pieces, each sent dry to the master and wet into a long dark reverb (_verb), so everything hangs in the air.
   // _verb(): a 3.4 s reverb made from decaying noise, one per cue. _suck(): a reversed swell, air drawn in towards a
   // moment and cut off at it. _choir(): breathy wordless voices: a slightly unsteady saw plus breath noise through three
@@ -752,7 +765,7 @@ export const A = {
   // through it (night.js: 2.0 s wait since build 130, then they cross the wall plane about 0.56 s into their walk), walk = their walk
   // (6 s; they end either side of the bed, the one at -x on your right).
   greysIn(lead = 2.56, walk = 6) {
-    // Build 129 (owner): the doorway's roar, building as they come and cut dead the moment they cross the wall plane
+    // Build 129: the doorway's roar, building as they come and cut dead the moment they cross the wall plane
     // (lead seconds after the call). The build 125 version (in-drawn swell, ringing sweep, pressure) is kept in
     // docs/spare-sounds/pass-candidates.js. walk is unused now.
     A.passWall(lead);
@@ -760,7 +773,7 @@ export const A = {
   // The tall mantis stooping through the doorway and straightening in the room: d = the stoop-through (night.js 3.2 s:
   // head through at about 0.27 d, body through at 0.54 d, upright by 0.58 d), side = the step along the wall after it.
   mantisIn(d = 3.2, side = 1.6) {
-    // Build 129 (owner): the same roar, cut dead as the mantis's body comes through the doorway (0.54 d into the stoop).
+    // Build 129: the same roar, cut dead as the mantis's body comes through the doorway (0.54 d into the stoop).
     // The build 125 version is kept in docs/spare-sounds/pass-candidates.js. side is unused now.
     A.passWall(0.54 * d);
   },
@@ -768,9 +781,9 @@ export const A = {
   // The doorway's roar right in your face, louder as you near the wall, then cut dead as you reach it; in the bedroom the
   // room's drones are silenced at the same moment (night.js). lead = seconds from the call to reaching the wall (night.js
   // calls it as the drift to the wall starts; the view is fully white 3.3 s later, as the eye reaches the wall plane).
-  // Build 127: the owner chose this from four build 126 candidates (D, 'sudden silence') and had the ear ringing and the
-  // two heartbeats after the cut removed; they wanted the roar. All four originals are kept, unchanged, in
-  // docs/spare-sounds/pass-candidates.js. No noise sweeps here (owner: no swishes).
+  // Build 127: candidate D ('sudden silence') of four build 126 candidates, with the ear ringing and the two heartbeats
+  // after the cut removed. All four originals are kept, unchanged, in docs/spare-sounds/pass-candidates.js. No noise
+  // sweeps here.
   passWall(lead = 3.3) {
     if (!ctx) return;
     lead = sp(lead);

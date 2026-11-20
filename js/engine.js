@@ -81,32 +81,97 @@ applyRes();
 // wholly out of view for 0.7 s it gets one roll: change (chance 0.2 at lucidity 0.55, rising to 0.9 at 0.15) or, if
 // already changed, perhaps go back. Nothing rolls again until it has been seen. With lucidity back at 0.55 or above,
 // whatever had changed goes back the next time it is out of sight.
-// (Builds 135-139 blurred the whole view instead: a lower render scale, then a Gaussian. The owner did not like the blur.)
+// Build 151 adds two things while lucidity is low: now and then a detail you are looking straight at warps (stretches
+// thin and wavers for about a second) and changes in front of you; and every so often the whole view blurs for a few
+// seconds with a line saying you are struggling to stay lucid (a CSS blur on the canvas, so it costs no shader).
+// (Builds 135-139 blurred the whole view all the time instead: a lower render scale, then a Gaussian.)
 export const unsteadyAmount = () => (E.unsteady && G.lucidity < 0.55 ? Math.min(1, (0.55 - G.lucidity) / 0.4) : 0);
 // obj: the thing watched, tested by its world bounding box; or `at` and r: a fixed world point and radius in metres
 // (parts of an InstancedMesh). change(k, n): k > 0 alters it (k = how unsteady, n counts up from 1,
 // a fresh variant each time); change(0, 0) puts it back as it was. Set d.hold = true while the scene animates it itself.
 export function unsteady(obj, change, { r = 0.5, at = null } = {}) {
-  const d = { obj, change, r, at, away: 0, rolled: true, changed: false, hold: false, n: 0 };
+  const d = { obj, change, r, at, away: 0, rolled: true, changed: false, hold: false, n: 0, seenT: 0 };
   E.details.push(d); return d;
 }
 const DET = { fr: new THREE.Frustum(), m: new THREE.Matrix4(), s: new THREE.Sphere(), b: new THREE.Box3() };
+// a warp in progress: { d, t, dur, base (scale), changed (done at the midpoint) }; WARP.next counts down to the next one
+const WARP = { on: null, next: 6, v: new THREE.Vector3(), f: new THREE.Vector3() };
+function endWarp() { const w = WARP.on; if (!w) return; WARP.on = null; w.d.obj.scale.copy(w.base); }
+function runWarp(dt, k) {
+  const w = WARP.on;
+  if (!w) return;
+  w.t += dt; const u = Math.min(1, w.t / w.dur);
+  if (w.d.hold || !w.d.obj.parent) { endWarp(); return; }
+  // stretches tall and thin and wavers, never squashes (a seated child must not sink into the stool): height grows by up
+  // to 14%, width shrinks by up to 8%, beating three times, eased in and out
+  const env = Math.sin(Math.PI * u), wob = Math.abs(Math.sin(u * Math.PI * 3)) * env, a = 0.6 + 0.4 * k;
+  w.d.obj.scale.set(w.base.x * (1 - 0.08 * a * wob), w.base.y * (1 + 0.14 * a * wob), w.base.z * (1 - 0.08 * a * wob));
+  if (!w.changed && u >= 0.5) {
+    w.changed = true;
+    if (w.d.changed && Math.random() < 0.3) { w.d.changed = false; w.d.change(0, 0); } else { w.d.changed = true; w.d.change(Math.max(k, 0.05), ++w.d.n); }
+  }
+  if (u >= 1) endWarp();
+}
 function watchDetails(dt) {
-  if (!E.details.length) return;
+  if (!E.details.length) { endWarp(); return; }
   const k = unsteadyAmount();
   E.camera.updateMatrixWorld();
   DET.m.multiplyMatrices(E.camera.projectionMatrix, E.camera.matrixWorldInverse); DET.fr.setFromProjectionMatrix(DET.m);
+  runWarp(dt, k);
+  if (!WARP.on && k > 0) WARP.next -= dt;
+  let pick = null, pickA = 0.45;
+  E.camera.getWorldDirection(WARP.f);
   for (const d of E.details) {
     // a margin either way: anything still touching the edge of the screen counts as seen
     const seen = d.at ? DET.fr.intersectsSphere(DET.s.set(d.at, d.r * 1.15)) : DET.fr.intersectsBox(DET.b.setFromObject(d.obj).expandByScalar(0.08));
-    if (seen) { d.away = 0; d.rolled = false; continue; }
+    if (seen) {
+      d.away = 0; d.rolled = false; d.seenT += dt;
+      // low lucidity: of the details held near the middle of the view for 1.5 s or more, the nearest the centre may warp
+      if (k > 0 && !WARP.on && WARP.next <= 0 && !d.at && !d.hold && d.seenT > 1.5) {
+        DET.b.getCenter(WARP.v); E.camera.getWorldPosition(DET.s.center); WARP.v.sub(DET.s.center).normalize();
+        const an = Math.acos(Math.min(1, Math.max(-1, WARP.v.dot(WARP.f))));
+        if (an < pickA) { pickA = an; pick = d; }
+      }
+      continue;
+    }
+    d.seenT = 0;
     d.away += dt;
     if (d.rolled || d.hold || d.away < 0.7) continue;
     d.rolled = true;
     if (d.changed && (k === 0 || Math.random() < 0.3)) { d.changed = false; d.change(0, 0); }
     else if (k > 0 && Math.random() < 0.2 + 0.7 * k) { d.changed = true; d.change(k, ++d.n); }
   }
+  if (pick) {
+    WARP.on = { d: pick, t: 0, dur: 1.1, base: pick.obj.scale.clone(), changed: false };
+    WARP.next = (9 + Math.random() * 9) * (1.4 - 0.6 * k);   // about every 10-25 s of looking, more often the lower lucidity is
+  }
 }
+// low lucidity: now and then the view blurs for a few seconds, with a line the first times
+const LAPSE = { t: -1, next: 14, n: 0, line: null };
+const LAPSE_LINES = ['You struggle to remain lucid.', 'It slips. You hold on to it.', 'The room swims. Stay with it.'];
+function lapses(dt) {
+  const k = unsteadyAmount(), view = E.renderer && E.renderer.domElement;
+  if (!view) return;
+  // a scene can rule the blur out (E.noLapse: the vision, from the jester palace on), and one under way stops at once
+  if (E.noLapse) { if (LAPSE.t >= 0) endLapse(); return; }
+  if (LAPSE.t < 0) {
+    if (k <= 0 || E.paused) return;
+    LAPSE.next -= dt; if (LAPSE.next > 0) return;
+    LAPSE.t = 0; LAPSE.n++; LAPSE.peak = 2.5 + 3.5 * k;   // px of blur at 720p, scaled to the window below
+    // the line only while nothing else is being said or asked, and not every time
+    const busy = $('sub').classList.contains('on') || $('choices').style.display === 'flex';
+    if (!busy && (LAPSE.n <= 2 || Math.random() < 0.4)) { LAPSE.line = LAPSE_LINES[(LAPSE.n - 1) % LAPSE_LINES.length]; flashSub(LAPSE.line, 'self'); }
+    return;
+  }
+  LAPSE.t += dt;
+  // 0.9 s in, 1.4 s held (wavering), 1.5 s out
+  const T = LAPSE.t, e = T < 0.9 ? T / 0.9 : T < 2.3 ? 1 - 0.25 * Math.abs(Math.sin((T - 0.9) * 4)) : Math.max(0, 1 - (T - 2.3) / 1.5);
+  const px = LAPSE.peak * e * e * (3 - 2 * e) * (innerHeight / 720);
+  view.style.filter = px > 0.05 ? 'blur(' + px.toFixed(2) + 'px)' : '';
+  if (T > 2.9 && LAPSE.line) { if ($('sub').textContent === t(LAPSE.line)) clearSub(); LAPSE.line = null; }
+  if (T >= 3.8) { endLapse(); LAPSE.next = (16 + Math.random() * 18) * (1.4 - 0.6 * k); }
+}
+function endLapse() { LAPSE.t = -1; LAPSE.line = null; if (E.renderer) E.renderer.domElement.style.filter = ''; }
 const fpsEl = document.createElement('div');
 fpsEl.style.cssText = 'position:fixed;left:8px;top:6px;font:12px monospace;color:#8f8;z-index:9;display:none;text-shadow:0 0 3px #000';
 document.body.appendChild(fpsEl);
@@ -407,7 +472,7 @@ function frame(ms) {
   E.camera.rotation.set(E.pitch + (Math.random() - 0.5) * sh, E.yaw + (Math.random() - 0.5) * sh, E.roll + FOOT.r);
 
   E.camera.position.y += FOOT.y;   // the step's rise and fall is drawn but never seen by scene code
-  watchDetails(dt);
+  watchDetails(dt); lapses(dt);
   if (!E.noRender) E.renderer.render(E.scene, E.camera);
   E.camera.position.y -= FOOT.y;   // a test harness may step frames without drawing them
   if (staleMats.size && ++staleFrames >= STALE_FRAMES) flushMaterials();
@@ -429,7 +494,7 @@ E.sys.add((dt) => {
   const vg = (G.fear * 0.85).toFixed(2);
   if (vg !== lastVig) { lastVig = vg; $('vig').style.opacity = vg; }
   if (E.heart) {
-    beat -= dt;
+    beat -= dt / (E.timeScale || 1);   // real seconds: at a developer speed-up the heart keeps a human pace (at 8x it beat 30 times a second)
     if (beat <= 0) {
       E.panic = Math.max(0, (E.panic || 0) - 0.06);          // struggling pushes the heart past anything fear alone does, then it eases
       E.dread = THREE.MathUtils.clamp(E.dread || 0, 0, 1);
@@ -554,12 +619,13 @@ export function clearScene() {
   staleFrames = 0;
   A.stopAll(0.3); clearSub(); $('choices').style.display = 'none'; bar(null); E.gazeAt = null; E.steady = false;
   // scene-only presentation left behind when a scene is abandoned mid-way (a developer jump)
-  const br = $('breath'); br.style.display = 'none'; br.firstElementChild.style.transform = br.firstElementChild.style.background = ''; br.lastElementChild.textContent = '';
+  $('how').classList.remove('on'); E.breathing = false; E.nudge = null;
+  for (const id of ['gaze', 'gazeDot', 'gazeLine']) $(id).style.display = 'none';
   $('bar').firstChild.style.background = ''; document.body.classList.remove('legible');
   E.updaters.clear();
   E.scene.fog = null; E.scene.background = new THREE.Color(0);
   E.limits = null; E.mode = 'locked'; E.bounds = null; E.captureLook = null; E.stride = 0; E.surface = 'ship'; E.dread = 0; E.canAct = false;
-  E.pull.yaw = E.pull.pitch = 0; E.roll = 0; E.shake = 0; E.unsteady = false; E.details.length = 0;
+  E.pull.yaw = E.pull.pitch = 0; E.roll = 0; E.shake = 0; E.unsteady = false; E.noLapse = false; endWarp(); E.details.length = 0; endLapse(); LAPSE.next = 14; WARP.next = 6;
   E.camera.fov = 70; E.camera.updateProjectionMatrix();
   hint(''); prompt('');
 }
@@ -587,9 +653,10 @@ const TOUCH_WORDS = [
   ['Move the mouse left and right (or A and D)', 'Drag left and right'],
   ['Move the mouse to turn your head', 'Drag to turn your head'],
   ['Hold A or D, or drag sideways', 'Drag sideways'],
+  ["Keep your eyes on it and follow it slowly. Don't grab at it.", "Keep your eyes on it: drag slowly after it, or hold FOCUS. Don't grab at it."],
   ['Move the mouse', 'Drag'],
   ['SPACE to struggle', 'STRUGGLE to fight'],
-  ['hold SHIFT while the ring grows, release while it shrinks', 'hold BREATHE while the ring grows, let go while it shrinks'],
+  ['hold SHIFT as the hum swells, let go as it fades', 'hold BREATHE as the hum swells, let go as it fades'],
 ];
 const touchWords = (t) => TOUCH_WORDS.reduce((s, [a, b]) => s.replace(a, b), t);
 export function hint(text) { if (E.touch && text) text = touchWords(text); text = t(text); if (text === lastHint && $('hint').textContent === text) return; lastHint = text; $('hint').textContent = text; }
@@ -633,11 +700,13 @@ export function note(id) {
   clearTimeout(note.timer); note.timer = setTimeout(() => tEl.classList.remove('on'), 3200);
 }
 export const noteCount = () => `${allNotes ? Object.keys(NOTES).length : Object.keys(unlocked).filter((k) => NOTES[k]).length} / ${Object.keys(NOTES).length}`;
+// the evidence tag shown on a field note: 'single' is one report (SINGLE read as "unique" or "unmarried")
+const TAG_LABEL = { single: 'ONE ACCOUNT' };
 export function toggleNotes(force) {
   const el = $('notes'), show = force !== undefined ? force : el.style.display !== 'block';
   if (show) {
     $('notesList').innerHTML = Object.entries(NOTES).map(([id, n]) => (unlocked[id] || allNotes)
-      ? `<div class="n"><b>${t(n.title)}</b><em class="t-${n.tag}">${t(n.tag.toUpperCase())}</em><p>${t(n.text)}</p><i>${t(n.src)}</i></div>`
+      ? `<div class="n"><b>${t(n.title)}</b><em class="t-${n.tag}">${t(TAG_LABEL[n.tag] || n.tag.toUpperCase())}</em><p>${t(n.text)}</p><i>${t(n.src)}</i></div>`
       : `<div class="n lock">${t('Not yet witnessed')}</div>`).join('');
     if (document.pointerLockElement) document.exitPointerLock();
   }

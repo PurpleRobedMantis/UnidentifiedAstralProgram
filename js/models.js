@@ -1812,8 +1812,8 @@ const lipMat2 = () => Mt('lips2', () => std(0xb27a70, { roughness: 0.55, map: sk
 export function makeHuman(scale = 1, color = 0x3d4a66, opt = {}) {
   const child = opt.child ?? scale < 0.8, K = personDims(child), g = new THREE.Group();
   const c = new THREE.Color(color), dark = c.clone().multiplyScalar(0.55).getHex(), cloth = clothMat(color), trouser = clothMat(dark);
-  const hash = (c.r * 7 + c.g * 13 + c.b * 5) * 10, hc = HAIR[hash % HAIR.length | 0], eyeC = [0x4a3324, 0x5a6f86, 0x3d2a1c, 0x5b6a45][(hash * 1.9 | 0) % 4];
-  const P = personBody(child), Hd = personHead(child, child ? (hash * 3.7 | 0) % HAIR_STYLES.length : 0);
+  const hash = (c.r * 7 + c.g * 13 + c.b * 5) * 10, hc = opt.hair ?? HAIR[hash % HAIR.length | 0], eyeC = [0x4a3324, 0x5a6f86, 0x3d2a1c, 0x5b6a45][(hash * 1.9 | 0) % 4];
+  const P = personBody(child), Hd = personHead(child, opt.hairStyle ?? (child ? (hash * 3.7 | 0) % HAIR_STYLES.length : 0));
   // body: everything from the hips up (and the legs hanging off it), so sitting can lower it
   const body = new THREE.Group(); g.add(body);
   body.add(new THREE.Mesh(P.pelvis, trouser));
