@@ -643,6 +643,12 @@ let subToken = 0;
 const quote = (text, who) => (who === 'self' || !text || /^[“"‘'(«„]/.test(text) ? text : QUOTES[0] + text + QUOTES[1]);
 export async function say(text, who = 'self', dur) {
   text = t(text); const el = $('sub'), my = ++subToken;
+  // a line still showing fades out first (the #sub transition, 0.35 s) instead of being swapped in place; game time, so
+  // fast speeds and stepped test runs never lose a line to the fade
+  if (el.classList.contains('on') && el.textContent) {
+    el.classList.remove('on'); await wait(0.32);
+    if (my !== subToken) { await wait(dur || 1.7 + text.length * 0.05); return; }   // replaced meanwhile: keep the caller's timing
+  }
   el.className = 'layer ' + who; el.textContent = quote(text, who);
   requestAnimationFrame(() => el.classList.add('on'));
   await wait(dur || 1.7 + text.length * 0.05);
@@ -661,7 +667,10 @@ const TOUCH_WORDS = [
   ['Move the mouse left and right (or A and D)', 'Drag left and right'],
   ['Move the mouse to turn your head', 'Drag to turn your head'],
   ['Hold A or D, or drag sideways', 'Drag sideways'],
+  ["Hold their gaze. Your eyes will try to slide away.", "Hold their gaze: drag back to their eyes when they slide away, or hold FOCUS."],
   ["Keep your eyes on it and follow it slowly. Don't grab at it.", "Keep your eyes on it: drag slowly after it, or hold FOCUS. Don't grab at it."],
+  ['Look where the laser points, and hold your eyes there.', 'Drag to where the laser points, or hold FOCUS.'],
+  ['Hold the light on him to lift him. It will try to slide away.', 'Drag to keep the light on him, or hold FOCUS.'],
   ['Move the mouse', 'Drag'],
   ['SPACE to struggle', 'STRUGGLE to fight'],
   ['hold SHIFT as the hum swells, let go as it fades', 'hold BREATHE as the hum swells, let go as it fades'],
@@ -669,6 +678,26 @@ const TOUCH_WORDS = [
 const touchWords = (t) => TOUCH_WORDS.reduce((s, [a, b]) => s.replace(a, b), t);
 export function hint(text) { if (E.touch && text) text = touchWords(text); text = t(text); if (text === lastHint && $('hint').textContent === text) return; lastHint = text; $('hint').textContent = text; }
 export function bar(v) { $('bar').style.opacity = v == null ? 0 : 1; if (v != null) $('bar').firstChild.style.width = (Math.max(0, Math.min(1, v)) * 100) + '%'; }
+// A ring on screen round something the player must keep looking at (#gaze): it fills with p (0..1) and brightens while
+// aimed; a dot marks the middle of the view (#gazeDot) and a faint line runs from it to the ring whenever the eyes are off
+// it (#gazeLine). r is the ring's radius in pixels, or a world radius at the target when given as { world: m }.
+// Call every frame with the target's world position; gazeRing(null) hides all three.
+const gzV = new THREE.Vector3();
+export function gazeRing(pos, { p = 0, aimed = false, snapped = false, col = '#ffe9b0', r = 60, min = 26, max = 160 } = {}) {
+  const gz = $('gaze'), dot = $('gazeDot'), line = $('gazeLine');
+  if (!pos) { gz.style.display = dot.style.display = line.style.display = 'none'; return; }
+  gzV.copy(pos).project(E.camera);
+  const W = innerWidth, H = innerHeight, x = (gzV.x + 1) / 2 * W, y = (1 - gzV.y) / 2 * H, behind = gzV.z > 1;
+  if (typeof r === 'object') r = r.world / E.camera.position.distanceTo(pos) / Math.tan(E.camera.fov * Math.PI / 360) * H / 2;
+  r = Math.max(min, Math.min(max, r));
+  dot.style.display = 'block'; gz.style.display = behind ? 'none' : 'block';
+  gz.style.width = gz.style.height = (2 * r).toFixed(0) + 'px'; gz.style.transform = `translate(${(x - r).toFixed(1)}px, ${(y - r).toFixed(1)}px)`;
+  gz.style.setProperty('--p', (Math.min(1, Math.max(0, p)) * 100).toFixed(1) + '%'); gz.style.setProperty('--c', col);
+  gz.classList.toggle('on', aimed); gz.classList.toggle('snap', snapped);
+  const dx = x - W / 2, dy = y - H / 2, len = Math.hypot(dx, dy) - r - 6;
+  line.style.display = !aimed && !behind && len > 12 ? 'block' : 'none';
+  line.style.width = Math.max(0, len).toFixed(0) + 'px'; line.style.transform = `rotate(${Math.atan2(dy, dx).toFixed(3)}rad)`;
+}
 export function fade(to, dur = 1, color = '#000') {
   const el = $('fade'); el.style.background = color;
   const from = Number(el.style.opacity || getComputedStyle(el).opacity);

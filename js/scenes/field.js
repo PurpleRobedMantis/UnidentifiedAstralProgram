@@ -12,7 +12,7 @@
 // leave their paths, things show their insides. The man sees an ordinary night (u4D = 0). Every person's pose is a pure
 // function of their own clock, so a ghost is the same pose function at another time; a person who is "switched off" has
 // a clock that has stopped, and their ghosts fold back into them.
-import { THREE, E, $, on, wait, until, tween, lerp, say, hint, fade, note, setView, moveView, aimAt, warm, DEV } from '../engine.js';
+import { THREE, E, $, on, wait, until, tween, lerp, say, hint, gazeRing, fade, note, setView, moveView, aimAt, angleTo, warm, DEV } from '../engine.js';
 import { A } from '../audio.js';
 import { makeHuman, makeMantis, idleMantis, makeGrey, stepGrey, idleGrey, aimGrey, GREY_GAIT } from '../models.js';
 
@@ -37,6 +37,8 @@ const U = {
   uFogA: { value: new THREE.Vector4(0, 14.5, 0.55, 0.25) },   // wedge of fog: centre x, tip z, slope (z per metre of |x|), density
   uFogCol: { value: new THREE.Color(0.2, 0.235, 0.29) }, uFogTop: { value: 0 },   // extra height of the bank's top, metres
   uMed: { value: new THREE.Vector4(0, -50, 0, 0) },            // the medallion's light: position, strength
+  uBeam: { value: new THREE.Vector4(0, -50, 0, 0) },           // its beam: the point it is aimed at, strength (the beam leaves from uMed.xyz)
+  uBeamR: { value: 0.4 },                                     // the beam's radius at that point, metres
   uPick: { value: new THREE.Vector4(MAN_H.x, 30, MAN_H.z, 0) },   // the column of light: x, height, z, strength
   uCarA: { value: new THREE.Vector4(CAR_A.x, 1.2, CAR_A.z, 1) }, uCarB: { value: new THREE.Vector4(CAR_B.x, 1.2, CAR_B.z, 1) },
   uRed: { value: new THREE.Vector4(TABLE.x, 0.62, TABLE.z, 1) },
@@ -45,8 +47,21 @@ const U = {
 };
 const COMMON = `
 uniform float uTime; uniform float u4D; uniform vec4 uFogA; uniform vec3 uFogCol; uniform vec4 uPick; uniform float uFogTop; uniform vec4 uMed;
+uniform vec4 uBeam; uniform float uBeamR;
 // warm light from the held medallion, falling off with distance
 vec3 medLight(vec3 p) { vec3 d = p - uMed.xyz; return vec3(1.0, 0.8, 0.45) * uMed.w / (1.0 + dot(d, d) * 5.0); }
+// the medallion's beam: a cone from the disc to the point it is aimed at, soft at its edge; it ends a little past that
+// point (no shadows here, so the first thing it meets is taken to stop it)
+vec3 beamLight(vec3 p, vec3 n) {
+  if (uBeam.w <= 0.001) return vec3(0.0);
+  vec3 ax = uBeam.xyz - uMed.xyz; float L = max(length(ax), 0.05); ax /= L;
+  vec3 d = p - uMed.xyz; float t = dot(d, ax);
+  if (t <= 0.0) return vec3(0.0);
+  float rad = max(0.04, uBeamR * t / L), r = length(d - ax * t);
+  float s = (1.0 - smoothstep(rad * 0.45, rad, r)) * (1.0 - smoothstep(L * 1.04, L * 1.3 + 0.25, t));
+  float face = 0.45 + 0.55 * max(dot(n, -ax), 0.0);
+  return vec3(1.0, 0.8, 0.5) * uBeam.w * s * face * (0.7 + 0.3 * exp(-r * r / (rad * rad) * 4.0));
+}
 float fHash(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float fNoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(fHash(i), fHash(i + vec2(1.0, 0.0)), f.x), mix(fHash(i + vec2(0.0, 1.0)), fHash(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -110,6 +125,7 @@ vec3 fieldLight(vec3 p, vec3 n) {
   c += ptl(uRed, vec3(1.0, 0.1, 0.05), p, n, 0.5) * 4.0;
   float r = length(p.xz - uPick.xz);
   c += vec3(0.85, 0.93, 1.0) * uPick.w * 7.0 / (1.0 + r * r * 0.08);
+  c += beamLight(p, n) * 10.0;
   return c;
 }
 float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a; vec2 ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0)); }
@@ -131,12 +147,13 @@ const FOG_FRAG = `{
     + (0.5 + 0.5 * cos(6.2831853 * (vec3(0.0, 0.33, 0.67) + fr * 0.9 + vFW.y * 0.35))) * fr * 0.3;
   c = mix(c, c4, u4D * step(0.0, uWarm));   // uWarm < 0: the tall one's own body, seen in its true colours
   c += c * medLight(vFW) * 1.5;
+  c += diffuseColor.rgb * beamLight(vFW, normalize(vFN)) * 2.4;   // the beam is a light of its own, so it lights the surface's own colour
   gl_FragColor.rgb = fieldAir(c, vFW);
 }`;
 function patch(m, warmth = 0) {
   const uw = { value: warmth };
   m.onBeforeCompile = (sh) => {
-    for (const k of ['uTime', 'u4D', 'uFogA', 'uFogCol', 'uPick', 'uFogTop', 'uMed']) sh.uniforms[k] = U[k];
+    for (const k of ['uTime', 'u4D', 'uFogA', 'uFogCol', 'uPick', 'uFogTop', 'uMed', 'uBeam', 'uBeamR']) sh.uniforms[k] = U[k];
     sh.uniforms.uWarm = uw;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFW; varying vec3 vFN;')
       .replace('#include <fog_vertex>', 'vFW = (modelMatrix * vec4(transformed, 1.0)).xyz; vFN = normalize(mat3(modelMatrix) * objectNormal);');
@@ -553,6 +570,7 @@ function armToward(h, sh, d, k, rest) {
 function laserDir(L, t, out) {
   const az = PI + 0.1 + 0.55 * Math.sin(t * 0.31) + 0.2 * Math.sin(t * 0.73 + 1), el = 0.82 + 0.28 * Math.sin(t * 0.23 + 0.5);
   dirAE(az, el, out);
+  if (L.lead) return out.lerp(L.lead.dir, L.lead.w).normalize();   // held or swept by the scene (the triangle, drawn as it is answered)
   if (L.drawAt == null) return out;
   const s = t - L.drawAt;
   if (s < -0.0 || s > 6.6) return out;
@@ -670,7 +688,7 @@ function orbPulse(i, t) {
   return 0.78 + 0.22 * Math.sin(t * 0.6 + i * 1.7);
 }
 function buildLights(g) {
-  const n = ORB_N + 5 + ORB_N * TRAIL;
+  const n = ORB_N + 5 + 3 + ORB_N * TRAIL;   // the lights, the amber one's two splits, the triangle, its three corners glinting, the trails
   const geo = new THREE.BufferGeometry();
   const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), size = new Float32Array(n), al = new Float32Array(n);
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aC', new THREE.BufferAttribute(col, 3));
@@ -721,6 +739,87 @@ function drawBeam(Lz, o, d) {
   p.setXYZ(0, o.x - side.x * w0, o.y - side.y * w0, o.z - side.z * w0); p.setXYZ(1, o.x + side.x * w0, o.y + side.y * w0, o.z + side.z * w0);
   p.setXYZ(2, far.x - side.x * w1, far.y - side.y * w1, far.z - side.z * w1); p.setXYZ(3, far.x + side.x * w1, far.y + side.y * w1, far.z + side.z * w1);
   p.needsUpdate = true;
+}
+// The drawn triangle as the mantis's sight keeps it (its past, still there): three ribbons between the corners, each drawn
+// out as the laser's stroke passes along it, turned to face the eye. draw(k[3], a): k = how far along each side.
+const TRACE = `
+uniform float uA;
+void main() {
+  float x = (vUv.x - 0.5) * 2.0;
+  gl_FragColor = vec4(vec3(0.2, 1.0, 0.36) * exp(-x * x * 3.0) * uA * (1.0 - 0.7 * fieldFog(cameraPosition, vWorld)), 1.0);
+}`;
+function buildTrace(g, corners) {
+  const geo = new THREE.BufferGeometry(), pos = new Float32Array(36), uv = [], idx = [];
+  for (let i = 0; i < 3; i++) { uv.push(0, 0, 1, 0, 0, 1, 1, 1); const b = i * 4; idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(36), 3)); geo.setIndex(idx);
+  const mat = sm(TRACE, { uA: { value: 0 } }, { ...ADD, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 6; mesh.visible = false; g.add(mesh);
+  const a = V(0, 0, 0), b = V(0, 0, 0), side = V(0, 0, 0), d = V(0, 0, 0), P = geo.attributes.position;
+  return {
+    mesh, mat,
+    draw(k, alpha) {
+      mesh.visible = alpha > 0.002; mat.uniforms.uA.value = alpha; if (!mesh.visible) return;
+      const cam = E.camera.position;
+      for (let i = 0; i < 3; i++) {
+        a.copy(corners[i]); b.copy(corners[i]).lerp(corners[(i + 1) % 3], Math.max(0.0001, k[i]));
+        d.subVectors(b, a); side.subVectors(a, cam).cross(d).normalize();
+        const w0 = a.distanceTo(cam) * 0.0032 * (k[i] > 0 ? 1 : 0), w1 = b.distanceTo(cam) * 0.0032 * (k[i] > 0 ? 1 : 0);
+        P.setXYZ(i * 4, a.x - side.x * w0, a.y - side.y * w0, a.z - side.z * w0); P.setXYZ(i * 4 + 1, a.x + side.x * w0, a.y + side.y * w0, a.z + side.z * w0);
+        P.setXYZ(i * 4 + 2, b.x - side.x * w1, b.y - side.y * w1, b.z - side.z * w1); P.setXYZ(i * 4 + 3, b.x + side.x * w1, b.y + side.y * w1, b.z + side.z * w1);
+      }
+      P.needsUpdate = true;
+    },
+  };
+}
+
+// ---------------------------------------------------------------- the medallion's beam
+// A cone of warm light from the held disc to the point it is aimed at, rebuilt in world space each frame (no stale bounds:
+// never culled). Brightest down its middle and near the disc, as light through night air is; the surfaces it falls on are
+// lit by beamLight (uBeam).
+const BEAMC = `
+uniform float uB; uniform vec3 uAx; uniform float uEnd;
+void main() {
+  vec3 v = normalize(cameraPosition - vWorld);
+  float f = abs(dot(normalize(vNormal), v));
+  float y = vUv.y;
+  // seen from the side, the middle of the cone (facing the eye) is brightest; seen down its length, from behind the disc,
+  // the whole of it is a haze of light
+  float look = pow(abs(dot(uAx, v)), 3.0);
+  float a = max(pow(f, 1.8), 0.55 * look) * (0.3 + 0.7 * exp(-y * 1.8)) * smoothstep(0.0, 0.06, y) * mix(pow(1.0 - y, 3.0), 1.0 - 0.5 * smoothstep(0.8, 1.0, y), uEnd);   // uEnd 0: it meets nothing and thins out into the air
+  float motes = 0.8 + 0.2 * fNoise(vec2(vUv.x * 18.0, y * 9.0 - uTime * 0.7));
+  gl_FragColor = vec4(vec3(1.0, 0.84, 0.56) * a * motes * uB * 0.32 * (1.0 - 0.7 * fieldFog(cameraPosition, vWorld)), 1.0);
+}`;
+const CONE_A = 24, CONE_L = 8;
+function buildBeamCone(g) {
+  const n = (CONE_A + 1) * (CONE_L + 1), geo = new THREE.BufferGeometry(), uv = [], idx = [];
+  for (let j = 0; j <= CONE_L; j++) for (let i = 0; i <= CONE_A; i++) uv.push(i / CONE_A, j / CONE_L);
+  for (let j = 0; j < CONE_L; j++) for (let i = 0; i < CONE_A; i++) { const p = j * (CONE_A + 1) + i, q = p + CONE_A + 1; idx.push(p, q, p + 1, p + 1, q, q + 1); }
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
+  const mat = sm(BEAMC, { uB: { value: 0 }, uAx: { value: V(0, 0, 1) }, uEnd: { value: 1 } }, { ...ADD, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 8; mesh.visible = false; g.add(mesh);
+  const ax = V(0, 0, 0), e1 = V(0, 0, 0), e2 = V(0, 0, 0), c = V(0, 0, 0), up = V(0, 1, 0), P = geo.attributes.position, N = geo.attributes.normal;
+  return {
+    mesh, mat,
+    // from o to t, radius r0 at o and r1 at t; strength b; end 1 when it lands on something, 0 when it runs out into the air
+    set(o, t, r0, r1, b, end = 1) {
+      mesh.visible = b > 0.002; mat.uniforms.uB.value = b; mat.uniforms.uEnd.value = end; if (!mesh.visible) return;
+      ax.subVectors(t, o); const L = Math.max(0.05, ax.length()); ax.multiplyScalar(1 / L); mat.uniforms.uAx.value.copy(ax);
+      e1.crossVectors(ax, Math.abs(ax.y) > 0.95 ? _v2.set(1, 0, 0) : up).normalize(); e2.crossVectors(ax, e1);
+      const slope = (r1 - r0) / L;
+      for (let j = 0; j <= CONE_L; j++) {
+        const s = j / CONE_L, r = r0 + (r1 - r0) * s; c.copy(o).addScaledVector(ax, L * s);
+        for (let i = 0; i <= CONE_A; i++) {
+          const a = i / CONE_A * TAU, ca = Math.cos(a), sa = Math.sin(a), k = j * (CONE_A + 1) + i;
+          P.setXYZ(k, c.x + (e1.x * ca + e2.x * sa) * r, c.y + (e1.y * ca + e2.y * sa) * r, c.z + (e1.z * ca + e2.z * sa) * r);
+          const nx = e1.x * ca + e2.x * sa - ax.x * slope, ny = e1.y * ca + e2.y * sa - ax.y * slope, nz = e1.z * ca + e2.z * sa - ax.z * slope, nl = Math.hypot(nx, ny, nz);
+          N.setXYZ(k, nx / nl, ny / nl, nz / nl);
+        }
+      }
+      P.needsUpdate = N.needsUpdate = true;
+    },
+  };
 }
 
 // ---------------------------------------------------------------- the column of light (the pickup)
@@ -806,7 +905,7 @@ function formify(obj, col) {
 // ---------------------------------------------------------------- the scene
 export async function field() {
   const g = new THREE.Group(); E.scene.add(g);
-  U.uFogTop.value = 0; U.uPick.value.w = 0; U.uMed.value.w = 0;   // shared uniforms keep their values between runs of the scene
+  U.uFogTop.value = 0; U.uPick.value.w = 0; U.uMed.value.w = 0; U.uBeam.value.w = 0;   // shared uniforms keep their values between runs of the scene
   E.scene.background = new THREE.Color(0);
   // lights for the standard materials (people, the mantis, cars): starlight from the whole sky, the cars' cabin lamps, the red
   // torch, the column. All exist from the start (a light added later recompiles every material).
@@ -821,7 +920,7 @@ export async function field() {
   for (const c of CREW) if (c.cloth) chair(g, c.at.x, c.at.z, c.cloth);
   const blk = blanket(g);
   const tbl = table(g);
-  const lights = buildLights(g), laser = buildLaser(g);
+  const lights = buildLights(g), laser = buildLaser(g), trace = buildTrace(g, lights.tri), beamCone = buildBeamCone(g);
   const column = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.6, 80, 32, 1, true), sm(COLUMN, {}, { ...ADD, side: THREE.DoubleSide }));
   column.position.set(FEET.x, 40, FEET.z); column.frustumCulled = false; column.renderOrder = 7; column.visible = false; g.add(column);
 
@@ -891,7 +990,7 @@ export async function field() {
   const setForms = (f) => { for (const x of forms) x.set(f); };
   const S = {
     t: 0, view: 'mantis', walk: false, auto: false, ph: 0, amt: 0, side: 1, bodyYaw: 0, walkYaw: 0, mp: V(START.x, 0, START.z),
-    tip: 15.6, tipTo: null, triOn: null, triMove: null, open: 0, tilt: 0, lift: 0, pick: 0, switches: 0, busy: false,
+    tip: 15.6, tipTo: null, triMove: null, triWake: [null, null, null], triCharge: [0, 0, 0], triWait: false, triAt: -1, traceK: [0, 0, 0], gl: [0, 0, 0], traceA: 0, float: 0, open: 0, tilt: 0, lift: 0, pick: 0, switches: 0, busy: false,
     look: { mantis: { yaw: 0, pitch: -0.05 }, man: null }, fogTo: null, fogLead: 0.8, fogW: 0.25, thin: 0, final: false, cut: false, d: 99, lifting: false, over: 0, raised: false, splitAt: null, sp0: V(0, 0, 0), cNow: V(0, 0, 0), cOver: V(FEET.x, 62, FEET.z), ct: 0, warpK: 0,
   };
   const goalDist = () => Math.hypot(S.mp.x - FEET.x, S.mp.z - FEET.z);
@@ -1194,13 +1293,14 @@ export async function field() {
       }
     }
     // the man rising: tipped up onto his feet as if lifted by the head, then up the column
-    if (S.tilt > 0 || S.lift > 0) {
+    if (S.tilt > 0 || S.lift > 0 || S.float > 0) {
       // upright he faces the tall one; going up he turns slowly round to face the camp below
       const k = sm01(0, 1, S.tilt), f0 = Math.atan2(S.mp.x - FEET.x, S.mp.z - FEET.z), f1 = Math.atan2(CAMP.x - FEET.x, CAMP.z - FEET.z);
       const face = f0 + wrap(f1 - f0) * (S.turn || 0);
       man.h.rotation.set(-PI / 2 * (1 - k), face * k, 0, 'YXZ');
-      man.h.position.set(FEET.x, manDrop * (1 - k) + S.lift, FEET.z);
-      for (const gh of man.ghosts) gh.visible = false;
+      man.h.position.set(FEET.x, manDrop * (1 - k) + S.float + S.lift, FEET.z);
+      if (S.tilt > 0 || S.lift > 0) for (const gh of man.ghosts) gh.visible = false;
+      else for (const gh of man.ghosts) gh.position.y = manDrop + S.float;   // still lying flat: his copies through time rise with him
     }
     fore.rotation.y = Math.atan2(S.mp.x - FEET.x, S.mp.z - FEET.z);
     fore.position.y = S.lift;
@@ -1228,7 +1328,7 @@ export async function field() {
       put(_v.copy(p0).add(_v2.set(13, 4, -3).multiplyScalar(k1)), ORB_COLS[0], 30 * Math.max(0.3, k1), k1 * (0.35 + 0.65 * pu));
       put(_v.copy(p0).add(_v2.set(-7, 11, 5).multiplyScalar(k2)), ORB_COLS[0], 30 * Math.max(0.3, k2), k2 * (0.35 + 0.65 * pu)); }
     // the triangle: three lights coming on one by one where the laser drew; holding; moving as one; at the end, over him
-    const triK = (i) => (S.triOn == null ? 0 : sm01(S.triOn + i * 0.6, S.triOn + i * 0.6 + 0.35, T));
+    const triK = (i) => (S.triWake[i] == null ? 0 : sm01(S.triWake[i], S.triWake[i] + 1.4, T));   // each one swells in over 1.4 s once woken
     const mv = S.triMove == null ? 0 : sm01(S.triMove, S.triMove + 6, T);
     const over = S.over;
     const cNow = S.cNow.copy(lights.triC).lerp(TRI_C2, mv).lerp(S.cOver, over);
@@ -1238,6 +1338,15 @@ export async function field() {
       put(p, [1, 0.92, 0.78], (38 + 10 * k) * (1 + 0.6 * over), k * (0.9 + 0.1 * Math.sin(T * 0.9 + i)));
       sky += k * 0.8;
     }
+    // the corners the laser drew, while they wait to be answered: a green-white glint pulsing on each, brighter as the eyes
+    // settle on it, gone as its light swells in
+    for (let i = 0; i < 3; i++) {
+      S.gl[i] += ((S.triWait && S.triAt === i ? 1 : 0) - S.gl[i]) * Math.min(1, dt * 6);
+      const w = S.gl[i], ch = S.triCharge[i], pu = 0.5 + 0.5 * Math.sin(T * 3.4 + i * 2.1);
+      put(lights.tri[i], [0.55 + 0.45 * ch, 1, 0.62 + 0.3 * ch], 30 + 18 * pu + 26 * ch, w * (0.45 + 0.55 * pu + 0.9 * ch));
+    }
+    // the drawn triangle, as the mantis's sight keeps it: drawn out stroke by stroke behind the laser, then held while it waits
+    trace.draw(S.traceK, S.traceA * U.u4D.value);
     if (S.open > 0) { lights.ring.visible = true; lights.ring.position.copy(cNow); lights.ring.lookAt(E.camera.position); lights.ring.scale.setScalar(4 + 40 * S.open); lights.ringM.uniforms.uO.value = S.open; }
     const show = U.u4D.value;
     for (let i = 0; i < ORB_N; i++) for (let j = 0; j < TRAIL; j++) {
@@ -1331,12 +1440,57 @@ export async function field() {
   const w0 = S.t;
   await until(() => S.d < 13 || S.t - w0 > 20, 60);
   if (S.d >= 13) S.auto = true;
-  // the laser draws a triangle on the sky; three lights answer
-  P.L.drawAt = lz.clock + 0.4;
-  await say('A green line draws a triangle on the sky.');
-  await until(() => lz.clock > P.L.drawAt + 4.6, 10);
-  S.triOn = S.t; P.pointAt = man.clock + 1.0; if (A.lightsAnswer) A.lightsAnswer();
-  await wait(1.4);
+  // the laser draws a triangle on the sky (behind the tall one, high in the south): the view is turned up to it as it is drawn
+  // the laser leads: it swings onto the first corner and holds there. The tall one answers the corner it holds by looking
+  // at it (about 0.7 s within 0.08 rad), which wakes a light there; the laser then draws the edge on to the next corner
+  // (1.2 s) and holds again; after the third it closes the triangle. The held corner glints and carries the gaze ring
+  // (gazeRing, as in the exam stare). Untouched for 25 s, the held corner wakes by itself (then 1.5 s after each edge).
+  const laserLead = P.L.lead = { dir: TRI_V[0].clone(), w: 0 };
+  S.traceK = [0, 0, 0]; S.triAt = 0; S.traceA = 1; S.triWait = true;
+  tween(1.2, (k) => { laserLead.w = k; }, (k) => k * k * (3 - 2 * k));
+  { const a = aimAt(lights.triC); moveView(2.6, { yaw: E.yaw + wrap(a.yaw - E.yaw), pitch: a.pitch }); }
+  say('The green laser stops on one point of the sky, and holds there.');   // the hint and the ring come with it, as the view turns
+  {
+    hint('Look where the laser points, and hold your eyes there.');
+    E.gazeAt = V(0, 0, 0);
+    const t0 = S.t, RING = Math.tan(0.08); let woken = 0, sweep = -1, sweepT = 0, nextAuto = t0 + 25;
+    const wake = (i) => {
+      S.triWake[i] = S.t; S.triCharge[i] = 1; if (A.lightWake) A.lightWake(woken); woken++;
+      if (woken === 1) hint('');
+      sweep = i; sweepT = 0; S.triAt = -1;
+    };
+    await new Promise((res) => {
+      const off = on((dt) => {
+        if (sweep >= 0) {
+          // the laser draws the edge from the corner just answered to the next; its line is left on the sky behind it
+          sweepT += dt; const f = sm01(0, 1, sweepT / 1.2), j = (sweep + 1) % 3;
+          laserLead.dir.copy(TRI_V[sweep]).lerp(TRI_V[j], f).normalize(); S.traceK[sweep] = Math.max(0.0001, f);
+          if (sweepT >= 1.2) {
+            S.traceK[sweep] = 1; sweep = -1;
+            if (woken >= 3) { gazeRing(null); off(); res(); return; }
+            S.triAt = j; nextAuto = Math.max(nextAuto, S.t + 1.5);
+          }
+        }
+        const i = S.triAt;
+        if (i >= 0) {
+          E.gazeAt.copy(lights.tri[i]);
+          const a = angleTo(lights.tri[i]), aimed = a < 0.08;
+          S.triCharge[i] = clamp(S.triCharge[i] + (aimed ? dt / 0.7 : -dt * 1.5), 0, 1);
+          gazeRing(lights.tri[i], { p: S.triCharge[i], aimed, col: '#a8ffc0', r: RING / Math.tan(E.camera.fov * Math.PI / 360) * innerHeight / 2 });
+          if (S.triCharge[i] >= 1 || (S.t - t0 > 25 && S.t > nextAuto)) wake(i);
+        } else gazeRing(null);
+        if (window.__triLog) window.__triLog({ S, near: i, best: i >= 0 ? angleTo(lights.tri[i]) : 9, lead: laserLead });
+      });
+    });
+    gazeRing(null); E.gazeAt = null; hint('');
+    S.triAuto = S.t - t0 > 25;
+  }
+  await wait(1.0);
+  S.triWait = false; tween(2.5, (k) => { S.traceA = 0.55 * (1 - k); });
+  tween(1.8, (k) => { laserLead.w = 1 - k; }, (k) => k * k * (3 - 2 * k)).then(() => { P.L.lead = null; });
+  // the man on the blanket points up at them; the view comes back down to the camp
+  P.pointAt = man.clock + 0.6;
+  { const a = aimAt(V(MAN_H.x, 0.4, MAN_H.z)); moveView(2.4, { yaw: E.yaw + wrap(a.yaw - E.yaw), pitch: a.pitch }); }
   await say('Three lights answer it.');
   note('ce5');
   // as the tall one comes near, the others stop
@@ -1409,6 +1563,8 @@ export async function field() {
   const outTo = (out) => { const dx = FEET.x - S.mp.x, dz = FEET.z - S.mp.z, l = Math.hypot(dx, dz), fx = dx / l, fz = dz / l; return out.set(S.mp.x + fx * 1.0 - fz * 0.08, 1.72, S.mp.z + fz * 1.0 + fx * 0.08); };
   const mTip = V(0, 0, 0), mOut = V(0, 0, 0), mT = V(0, 0, 0), mL = V(0, 0, 0), mTop = V(0, 0, 0), o3 = new THREE.Object3D();
   const MED = { reach: 0, out: 0, reachK: 0 };
+  // the beam: s its strength, aim how surely it is on him (0..1, eased), hit the point it is aimed at (world)
+  const BM = { s: 0, aim: 0, end: 1, hit: V(FEET.x, 0.3, FEET.z), src: V(0, 0, 0) };
   // the hook's target: the top of the lifted disc, then on out toward him
   const medTarget = (out) => { mt.root.localToWorld(out.copy(MED_TO).add(_v2.set(0, HANG, 0))); return MED.out > 0 ? out.lerp(outTo(mOut), MED.out) : out; };
   on(() => {
@@ -1427,9 +1583,16 @@ export async function field() {
       med.beads.instanceMatrix.needsUpdate = true;
     }
     // the light it gives while it acts
-    glow.visible = med.glow > 0.01; glowM.uniforms.uG.value = med.glow * 1.1 * (0.85 + 0.15 * Math.sin(S.t * 3.1));
-    if (glow.visible) { med.g.getWorldPosition(glow.position); glow.quaternion.copy(E.camera.quaternion); glow.scale.setScalar(0.5 + 0.7 * med.glow); }
+    // while the beam is out the disc's halo draws in (at full size it hid the man the beam falls on)
+    const bIn = 1 - 0.6 * Math.min(1, BM.s || 0);
+    glow.visible = med.glow > 0.01; glowM.uniforms.uG.value = med.glow * 1.1 * (0.85 + 0.15 * Math.sin(S.t * 3.1)) * (0.6 + 0.4 * bIn);
+    if (glow.visible) { med.g.getWorldPosition(glow.position); glow.quaternion.copy(E.camera.quaternion); glow.scale.setScalar((0.5 + 0.7 * med.glow) * bIn); }
     { med.g.getWorldPosition(_v); U.uMed.value.set(_v.x, _v.y, _v.z, med.glow * 2.2 * (0.85 + 0.15 * Math.sin(S.t * 3.1))); }
+    // the beam from the disc: narrower and brighter on him, wider and dimmer off him; drawn only in the tall one's view (from
+    // his own eyes it would come straight at them), its light on whatever it falls on in either view
+    { med.g.getWorldPosition(BM.src); const fl = 0.92 + 0.08 * Math.sin(S.t * 5.3) * Math.sin(S.t * 2.1), str = BM.s * (0.55 + 0.45 * BM.aim) * fl;
+      U.uBeam.value.set(BM.hit.x, BM.hit.y, BM.hit.z, str); U.uBeamR.value = lerp(0.6, 0.27, BM.aim);
+      beamCone.set(BM.src, BM.hit, 0.035, U.uBeamR.value, S.view === 'mantis' ? str : 0, BM.end); }
     // his eyes on it, while he lies and as he is brought up (he cannot turn his head; the eyes follow)
     if (S.watchMed && S.view === 'man') { med.g.getWorldPosition(_v); const a = aimAt(_v), k = Math.min(1, 1 / 30 * 4); E.yaw += wrap(a.yaw - E.yaw) * k; E.pitch += (a.pitch - E.pitch) * k; }
     if (window.__medLog) window.__medLog({ med, MED, mt, mantis, tip: tipOf(V(0, 0, 0)), glow, S });
@@ -1444,14 +1607,65 @@ export async function field() {
   }).then(() => { MED.reachK = 1; med.held = 1; });
   await say('The medallion lifts off your robe on its chain.');
   await until(() => med.held > 0, 4);
-  if (A.fieldPickup) hum = A.fieldPickup(3.4);
   tween(1.6, (k) => { MED.out = k; med.glow = k; });
-  tween(2.0, (k) => { S.pick = k; });
   await say('Your hook takes it and holds it out to him. It burns with light.');
+  // ---- its light, steered onto him: the beam goes where the eyes go, drifting and pulling away (E.pull, as in the exam
+  // stare; FOCUS on a phone eases the view back onto his chest). While it is on him he rises off the blanket, still flat and
+  // rigid; off him he sinks back a little (never below 10 cm under the highest he has been). Up 40 cm, the column takes
+  // him. After 40 s the view is eased onto him and he rises by himself.
+  let beamHum = null;
+  const BODY = { hd: V(0, 0, 0), ft: V(0, 0, 0), chest: V(0, 0, 0) };
+  const bodyLine = () => { man.h.updateMatrixWorld(true); mu.head.getWorldPosition(BODY.hd); man.h.localToWorld(BODY.ft.set(0, 0.2, 0)); BODY.chest.lerpVectors(BODY.ft, BODY.hd, 0.72); };
+  if (S.view === 'mantis') {
+    const FLOAT_UP = 0.4, R = rng(164), fw = V(0, 0, 0), u = V(0, 0, 0), w0 = V(0, 0, 0), q = V(0, 0, 0);
+    beamHum = A.fieldBeam ? A.fieldBeam() : null; const setBeam = level(beamHum);
+    tween(1.2, (k) => { BM.s = k; });
+    bodyLine(); E.gazeAt = BODY.chest;
+    hint('Hold the light on him to lift him. It will try to slide away.');
+    const t0 = S.t; let next = 0, best = 0, auto = false, tAuto = 0;
+    await new Promise((res) => {
+      const off = on((dt) => {
+        bodyLine();
+        // the view ray's nearest approach to the line of his body (feet to head): how far off him it is, and how far along it
+        const c = E.camera.position; E.camera.getWorldDirection(fw);
+        u.subVectors(BODY.hd, BODY.ft); w0.subVectors(BODY.ft, c);
+        const a = u.dot(u), b = u.dot(fw), d = u.dot(w0), e = fw.dot(w0), den = Math.max(1e-6, a - b * b);
+        const sb = clamp((b * e - d) / den, 0, 1); q.copy(BODY.ft).addScaledVector(u, sb);
+        const tq = Math.max(0.2, _v2.subVectors(q, c).dot(fw)), off2 = q.distanceTo(_v.copy(c).addScaledVector(fw, tq));
+        const onIt = off2 < 0.3, prog = S.float / FLOAT_UP;
+        BM.aim += ((onIt ? 1 : 0) - BM.aim) * Math.min(1, dt * 5);
+        // where it falls: the ground along the view, drawn in onto him as the view comes near him (always on the view ray)
+        const tg = fw.y < 0 ? Math.min(14, (0.02 - c.y) / fw.y) : 14;   // 14 m out when it would meet the ground further than that (no jump at the cap)
+        // (eased over about 70 ms, so where it lands slides rather than jumps as the view crosses on or off him)
+        _v.copy(c).addScaledVector(fw, lerp(tg, Math.min(tg, tq), 1 - sm01(0.3, 0.7, off2))); BM.hit.lerp(_v, S.t - t0 < 0.05 ? 1 : Math.min(1, dt * 14));
+        BM.end += (Math.max(1 - sm01(0.3, 0.7, off2), 1 - sm01(12, 13.8, tg)) - BM.end) * Math.min(1, dt * 8);
+        // the pull on the eyes, a new way every 0.6 to 1.3 s, a little stronger as he comes up
+        if (!auto && S.t > next) { next = S.t + 0.6 + R() * 0.7; const an = R() * TAU, m = 0.15 + 0.15 * prog; E.pull.yaw = Math.cos(an) * m; E.pull.pitch = Math.sin(an) * m * 0.7; }
+        if (auto) { const ai = aimAt(BODY.chest), k = Math.min(1, dt * 2.2 * sm01(0, 1.2, S.t - tAuto)); E.yaw += wrap(ai.yaw - E.yaw) * k; E.pitch += (ai.pitch - E.pitch) * k; }
+        if (onIt) S.float = Math.min(FLOAT_UP, S.float + dt * (auto ? 0.1 : 0.04));
+        else S.float = Math.max(0, best - 0.1, S.float - dt * 0.035);
+        best = Math.max(best, S.float);
+        setBeam(BM.aim, prog);
+        gazeRing(BODY.chest, { p: prog, aimed: onIt, col: '#ffd9a0', r: { world: 0.3 }, max: innerHeight * 0.3 });
+        if (!auto && S.t - t0 > 40) { auto = true; tAuto = S.t; E.pull.yaw = E.pull.pitch = 0; }
+        if (window.__beamLog) window.__beamLog({ S, BM, off: off2, onIt, auto, chest: BODY.chest, fw });
+        if (S.float >= FLOAT_UP) { off(); res(); }
+      });
+    });
+    E.pull.yaw = E.pull.pitch = 0; E.gazeAt = null; hint(''); gazeRing(null);
+    S.beamAuto = auto;
+  } else { BM.s = 1; tween(3, (k) => { S.float = 0.4 * k; }); }
+  // held on him from here: the beam follows his chest until it fades
+  { const offF = on((dt) => { bodyLine(); BM.hit.lerp(BODY.chest, Math.min(1, dt * 6)); BM.end = 1; BM.aim += (1 - BM.aim) * Math.min(1, dt * 4); if (BM.s <= 0.001 && S.final) offF(); }); }
+  // the column comes on and takes him; then his eyes
+  if (A.fieldPickup) hum = A.fieldPickup(1.9);
+  tween(2.0, (k) => { S.pick = k; });
+  await wait(1.2);
   // the end: from here on they are the half-there chrome in either sight; and his eyes, on the light
   S.final = true;
   if (S.view !== 'man') await doSwitch('man', () => { med.g.getWorldPosition(_v); const a = aimAt(_v); E.yaw = a.yaw; E.pitch = a.pitch; E.limits = null; S.watchMed = true; });
   else { E.limits = null; S.watchMed = true; setForms('chrome'); }
+  tween(1.8, (k) => { BM.s = 1 - k; }); if (beamHum) beamHum.stop(2.5);
   tween(2.6, (k) => { S.tilt = k; });
   await say('You come up off the blanket, rigid. Not by your own strength.');
   S.lifting = true; mu.neck.visible = false;   // upright, his own neck would fill his view

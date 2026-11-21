@@ -12,6 +12,7 @@ import { A } from '../audio.js';
 import { makeGrey, makeMantis, idleMantis, makeHuman, idleHuman, makePlayerBody, aimGrey, clearGreyArm, gripGrey,
   makeGreyWig, makeGreyShift, SHIFT_SEAT, humanGaze } from '../models.js';
 import { KNOWN_KID, KIT, seatKnownKid, clearLap } from './ship.js';
+import { buildVesselHall } from './vessels.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const sm3 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -743,25 +744,8 @@ export async function reveal() {
   const m1Kid = makeHuman(KNOWN_KID.scale, KNOWN_KID.color, KNOWN_KID.hair), m1Grey = makeGrey();
   const m1Toy = new THREE.Mesh(new THREE.TetrahedronGeometry(0.09), smL(KIT.JEWEL, { uColor: { value: KIT.dcol(0xffd27a) }, uGlow: { value: 1.2 } }));
   {
-    const fl = new THREE.Mesh(new THREE.PlaneGeometry(5, 12), smL(KIT.HALL_FLOOR)); fl.rotation.x = -Math.PI / 2; fl.position.z = -16; m1.add(fl);
-    const wm = smL(KIT.HALL_WALL);
-    for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(12, 3.8), wm); w.position.set(s * 2.5, 1.9, -16); w.rotation.y = -s * Math.PI / 2; m1.add(w); }
-    const ce = new THREE.Mesh(new THREE.PlaneGeometry(5, 12), wm); ce.rotation.x = Math.PI / 2; ce.position.set(0, 3.8, -16); m1.add(ce);
-    const end = new THREE.Mesh(new THREE.PlaneGeometry(5, 3.8), wm); end.position.set(0, 1.9, -21.6); m1.add(end);
-    const capM = std(0x39454a, { metalness: 0.9, roughness: 0.35 });
-    const base = KIT.lathe([[0, 0], [0.47, 0], [0.47, 0.05], [0.43, 0.08], [0.43, 0.24], [0.39, 0.3], [0, 0.3]], 40), cap = KIT.lathe([[0, 0], [0.4, 0], [0.41, 0.02], [0.41, 0.12], [0.37, 0.16], [0.3, 0.2], [0.12, 0.22], [0.1, 0.3], [0, 0.3]], 40);
-    const seedG = KIT.lathe([[0, -0.19], [0.08, -0.17], [0.11, -0.08], [0.1, 0.03], [0.06, 0.09], [0.075, 0.13], [0.07, 0.18], [0.03, 0.21], [0, 0.215]], 24);
-    const fluidM = smL(KIT.FLUID, {}, { transparent: true, depthWrite: false }), glassM = smL(KIT.GLASS, {}, KIT.ADD), seedM = smL(KIT.SEED, {}, { displace: KIT.BOB });
-    const ringM = new THREE.MeshBasicMaterial({ color: 0x6fffd8 }), torus = new THREE.TorusGeometry(0.372, 0.016, 8, 48); torus.rotateX(Math.PI / 2);
-    for (let i = 4; i < 9; i++) for (const s of [-1, 1]) {
-      const x = s * 1.75, z = KIT.VZ(i);
-      const b = new THREE.Mesh(base, capM); b.position.set(x, 0, z); m1.add(b);
-      const c = new THREE.Mesh(cap, capM); c.position.set(x, 1.99, z); m1.add(c);
-      const sd = new THREE.Mesh(seedG, seedM); sd.position.set(x, 1.0 + (i % 3) * 0.08, z); sd.rotation.set(0, i * 1.3, 0.25 * s); m1.add(sd);
-      const fl2 = new THREE.Mesh(new THREE.CylinderGeometry(0.335, 0.335, 1.62, 40, 1, true), fluidM); fl2.position.set(x, 1.15, z); fl2.renderOrder = 1; m1.add(fl2);
-      const gl = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 1.7, 40, 1, true), glassM); gl.position.set(x, 1.15, z); gl.renderOrder = 3; m1.add(gl);
-      for (const y of [0.33, 1.96]) { const r2 = new THREE.Mesh(torus, ringM); r2.position.set(x, y, z); m1.add(r2); }
-    }
+    // the same hall as the containers room (vessels.js), drawn through the memory's linear-colour wrapper
+    buildVesselHall(m1, { sm: smL, TIME: KIT.TIME, FOGU: KIT.FOGU, ADD: KIT.ADD, pxScale: () => E.renderer.domElement.height * 0.714 });
     m1Kid.position.set(0, 0, -19.5); m1.add(m1Kid);
     m1Grey.position.set(0.8, 0, -19.9); m1.add(m1Grey);
     m1Toy.userData.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: KIT.glowTex(), color: 0xffc24a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.7 }));

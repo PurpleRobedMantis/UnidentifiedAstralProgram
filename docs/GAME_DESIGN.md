@@ -45,7 +45,7 @@ A round, seamless, glowing room with no lamp and no door. You lie on a pedestal 
 - Another human lies on the next table, eyes open, staring upward.
 - A tall grey leans in until their eyes fill the view.
 
-**Mechanic: the stare.** Hold their gaze while fear pushes your view away. Hold it and a night sky opens out of each of their eyes; look away too often and you are sedated, losing part of the next act's memory. This is Jacobs's mindscan with Barney Hill's line.
+**Mechanic: the stare.** Hold their gaze while fear pushes your view away. A ring round their face shows where to keep your eyes and fills as you hold them. Hold it and a night sky opens out of each of their eyes; look away too often and you are sedated, losing part of the next act's memory. This is Jacobs's mindscan with Barney Hill's line.
 
 Afterwards a "static fuzz" sweeps up the walls and the room looks slightly different. The game does not say which version was real.
 
@@ -59,7 +59,7 @@ You can walk. A round metal room with four doorways, and the mantis on a dais in
 
 **The window.** A wall-sized screen shows the living world, then what was done to it: a silent flash, mushroom clouds, a firestorm, a dead plain. The film fades and the Earth is below you: it was never a screen. You walk to the glass and lay your hand flat on it. The mantis stands beside you and says "I know this is hard. I'm sorry." You choose how to answer: grief, anger at being shown it, or "why show me?" Mack's cases, with Turner's suspicion available as a reply.
 
-**The hall of containers.** Rows of softly lit vessels. A listless child holds out a toy. You may take it. It will not come home with you. Kept brief and quiet. Hopkins and Jacobs, with Lazar's contested "containers" line on a wall panel.
+**The hall of containers.** Rows of lit vessels, each a working apparatus with a small curled form inside on a cord. A listless child holds out a toy; the grey behind them watches the child, never you (in the reveal's memory of this hall, they are seen watching you). You may take it. It will not come home with you. Kept brief and quiet. Hopkins and Jacobs, with Lazar's contested "containers" line on a wall panel.
 
 **The still room.** The Gateway exercise. You lie on a low table: "Mind awake. Body asleep."
 1. **Tuning:** a different tone plays in each ear. Steer the difference between them to 4 Hz and hold it while it drifts.
@@ -75,7 +75,7 @@ After all four rooms the mantis asks, "Would you like to see more?" (if you have
 One operation, seen three ways. Tonight a group in a field in the countryside is doing CE5, meditating together and signalling with a green laser to invite contact.
 - **The loom.** A domed hall with a basin of lives below a gallery. A mantis in a robe of shifting silver weaves threads of light with six arms. Four beads each hold one way the group's night can go: they go home, nothing comes, rain, fog. Your view leaves your body and circles them slowly. You can hold one; their head turns all the way round to you, like an owl's. "The living do not touch the weave." With enough trust your touch pulls the chosen thread tight.
 - **The weather.** A tall grey in a high-collared cloak works a relief table of the countryside: a cloud forms in clear air, a lever pushes out a pointed bank of mist (Travis Walton's lever), rain falls on one farm. Their fingers rest on your hand as you press the last pad.
-- **The field.** You lie on a couch under a ring of light and wake inside a maroon-robed mantis at the edge of the field, beside two greys: all three drawn in lines of light. You saw the group arrive and set up. The mantis sees in four dimensions: each person trails where they have been and where they are going, and for a moment the whole scene folds. The laser draws a triangle and three lights answer. The friends freeze. You switch into one of them, paralysed, eyes only: the lights split and dart, fog comes over the hedge in a straight, steered line, and in it stand a mantis and two greys like half-present silver. "It is you." You go back into the mantis once, hold out the gold medallion from your robe, blazing, and through his eyes again he is lifted rigid off the blanket into the sky.
+- **The field.** You lie on a couch under a ring of light and wake inside a maroon-robed mantis at the edge of the field, beside two greys: all three drawn in lines of light. You saw the group arrive and set up. The mantis sees in four dimensions: each person trails where they have been and where they are going, and for a moment the whole scene folds. The laser holds on one point of the sky; you answer it by looking there, a light wakes, and the laser draws the next edge, until the triangle is closed and three lights hang in it. The friends freeze. You switch into one of them, paralysed, eyes only: the lights split and dart, fog comes over the hedge in a straight, steered line, and in it stand a mantis and two greys like half-present silver. "It is you." You go back into the mantis once, hold out the gold medallion from your robe, blazing, and steer its light onto him, holding it there against a drift while he floats up off the blanket; through his eyes again he is lifted rigid off the blanket into the sky.
 - **Afterwards.** In the basin he lies on a white table: the man from the next table in the exam room. "Hours ago. Or not yet."
 
 Sources: Steven Greer's CE-5 practice; three lights answering a traced triangle (his group at Gulf Breeze, 1992); rain falling on one small field (his group in Wiltshire, July 1992); Travis Walton's lever; being shown things by a tall mantis (Linda Porter, one of John Mack's cases) and being aware from two points at once (an experiencer's post). The field notes give each.
@@ -146,7 +146,7 @@ Mouse to look (arrow keys also turn the head); W A S D to walk when you can (Shi
 
 ## Scope
 
-In: the six acts and the control-room act (loom, weather, the field, the child), the endings, four ship rooms, six mechanics (break free, breathe, the stare, the two lessons, the Gateway tuning, look past the jesters), field notes.
+In: the six acts and the control-room act (loom, weather, the field, the child), the endings, four ship rooms, seven mechanics (break free, breathe, the stare, the two lessons, the Gateway tuning, the CE5 triangle and medallion light, look past the jesters), field notes.
 
 Out for the first version: saved games beyond unlocked field notes, voice acting, a second night.
 

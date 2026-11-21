@@ -118,6 +118,8 @@ const SOUNDS = [
     ['Mantis footsteps on grass', () => { for (let i = 0; i < 4; i++) setTimeout(() => A.fieldStep(1, i % 2 ? 1 : -1), i * 800); }],
     ['Pressure of the lights (loop)', () => A.lightsPressure()],
     ['Three lights answer', () => A.lightsAnswer()],
+    ['A light wakes at a corner (three in turn)', () => { for (let i = 0; i < 3; i++) setTimeout(() => A.lightWake(i), i * 2200); }],
+    ['The medallion beam held, on him then off (loop)', () => { const h = A.fieldBeam(); setTimeout(() => h.set(0, 0), 4000); setTimeout(() => h.set(1, 1), 7000); setTimeout(() => h.stop(2), 10000); }],
     ['The others stop', () => A.switchOff()],
     ['Into his body', () => A.fieldSwitch(true)],
     ['Into the mantis', () => A.fieldSwitch(false)],

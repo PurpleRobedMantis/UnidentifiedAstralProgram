@@ -1357,6 +1357,46 @@ export const A = {
     // the hook taking it: a dull knock of chitin on metal
     A._body(t + take, [380, 870, 1720], 0.25, 0.25, { q: 35 }); A._thump(t + take, 90, 0.12, 0.08);
   },
+  // One of the triangle's lights waking where the eyes have settled, about 2 s (n: how many woke before it; each sits a
+  // little lower, so the three build into one deep chord): a pressure building in the chest, the ears filling with it, a
+  // vast low body rubbed up into resonance as the light swells in, and a soft deep push as it arrives and holds. Every
+  // band stays at its pitch; only the loudness moves.
+  lightWake(n = 0) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02, k = [1, 0.89, 0.8][Math.min(2, Math.max(0, n))];
+    // the pressure: two deep tones a couple of hertz apart, beating, building in level
+    { const v = ctx.createGain(); v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.085, t + 1.2); v.gain.setTargetAtTime(0.0001, t + 1.5, 0.5); v.connect(master);
+      for (const [f, g] of [[41 * k, 1], [43.2 * k, 0.85], [82 * k, 0.3]]) { const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = f; og.gain.value = g; o.connect(og); og.connect(v); o.start(t); o.stop(t + 4.2); } }
+    // the ears filling: a low band of noise rising with it
+    { const a = A._fband(120 * k, 0.9, 1.3, 0); a.gain.setValueAtTime(0.0001, t); a.gain.exponentialRampToValueAtTime(1, t + 1.2); a.gain.setTargetAtTime(0.0001, t + 1.4, 0.6); a.src.stop(t + 4.5); }
+    // the body: a vast low resonance rubbed up into sound as the light comes
+    A._body(t + 0.2, [66 * k, 99 * k, 132 * k, 198 * k], 2.6, 0.5, { q: 60, swell: 1.0 });
+    // the arrival: a soft deep push as it holds
+    A._thump(t + 1.2, 38 * k, 1.2, 0.24);
+  },
+  // The medallion's beam, held (a loop): the gold disc singing as if bowed, its own modes (the ones it rang with as it came
+  // free of the robe) held up steadily; a warm deep hum under it, two of its notes beating slowly; and a close pressure in the
+  // air in front of the face. set(on, k): on (0..1) is how surely the beam is on him: on him it swells and the disc sings
+  // out; off him it thins to a quieter hum with the ring nearly gone. k (0..1) is how far he has come up: the hum strains a
+  // little louder. stop(sec).
+  fieldBeam() {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.05, srcs = [], bus = ctx.createGain(); bus.gain.setValueAtTime(0.0001, t); bus.gain.exponentialRampToValueAtTime(1, t + 1.0); bus.connect(master);
+    const ringBus = ctx.createGain(), humBus = ctx.createGain(); ringBus.gain.value = 1; humBus.gain.value = 1; ringBus.connect(bus); humBus.connect(bus);
+    // the hum: a deep warm note, its octave and twelfth; the root doubled half a hertz apart, beating slowly
+    { const v = ctx.createGain(); v.gain.value = 0.045; v.connect(humBus);
+      for (const [f, g, ty] of [[73.4, 1, 'sine'], [73.9, 0.7, 'sine'], [146.8, 0.4, 'triangle'], [220.2, 0.15, 'triangle']]) { const o = ctx.createOscillator(), og = ctx.createGain(); o.type = ty; o.frequency.value = f; og.gain.value = g; o.connect(og); og.connect(v); o.start(t); srcs.push(o); } }
+    // the disc singing: its modes held up by a steady rub, each a narrow band of noise that stays where it is
+    for (const [f, g, p] of [[540, 1, -0.15], [1310, 0.55, 0.15], [2290, 0.3, 0]]) { const a = A._fband(f, 90, g * 3.2, p, ringBus); a.gain.setValueAtTime(1, t); srcs.push(a.src); }
+    // the air pressing: a close low band of noise in front of the face
+    { const a = A._fband(160, 1.1, 0.5, 0, humBus); a.gain.setValueAtTime(1, t); srcs.push(a.src); }
+    // (handle)
+    const h = {
+      set(on = 1, k = 0) { const n = ctx.currentTime; ringBus.gain.setTargetAtTime(0.06 + 0.94 * on, n, 0.25); humBus.gain.setTargetAtTime((0.45 + 0.55 * on) * (1 + 0.4 * k), n, 0.3); },
+      stop(sec = 1) { const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4); for (const s of srcs) { try { s.stop(n + sec + 0.2); } catch (_) {} } live.delete(h); },
+    };
+    live.add(h); return h;
+  },
   // ==== end field cues ====
   // ==== reveal cues (js/scenes/reveal.js) ====
   // the audio clock (seconds), for scenes that lay sounds out against the music

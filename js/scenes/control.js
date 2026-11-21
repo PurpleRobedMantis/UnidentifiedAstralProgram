@@ -1,7 +1,7 @@
 // The control room: watching the weave, the weather console, the link. Then, after the field, the return.
 import { THREE, lookToward, E, G, on, wait, until, tween, lerp, say, hint, fade, note, setView, moveView, angleTo, aimAt, discard, warm } from '../engine.js';
 import { A } from '../audio.js';
-import { makeGrey, makeMantis, idleMantis, makeHuman, makePlayerBody, aimGrey, stepGrey, idleGrey, clearGreyArm, gripGrey, GREY_GAIT, T } from '../models.js';
+import { makeGrey, makeMantis, idleMantis, makeHuman, makePlayerBody, playerHead, aimGrey, stepGrey, idleGrey, clearGreyArm, gripGrey, GREY_GAIT, T } from '../models.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const V2 = (x, y) => new THREE.Vector2(x, y);
@@ -1448,15 +1448,12 @@ export async function prebuildMe(pre, me) {
 function ownCached(root, skip) { const map = new Map(); root.traverse((o) => { for (let p = o; p; p = p.parent) if (p === skip) return; if (!o.material) return;
   const own = (m) => { if (!(m.userData && m.userData.keep === m.uuid)) return m; if (!map.has(m)) { const c = m.clone(); c.userData = {}; map.set(m, c); } return map.get(m); };
   o.material = Array.isArray(o.material) ? o.material.map(own) : own(o.material); }); }
-// You, seen from outside (the bead orbit): your own body standing naturally, arms loose, with a head: the neck and head
-// of makeHuman set on the shirt's collar exactly where they sit on the human body the player's torso is cut from (the
-// player body is that body moved so the eyes are at its origin: down 1.59 m, back 9.5 cm, turned round). pos: the eyes.
+// You, seen from outside (the bead orbit): your own body standing naturally, arms loose, with a head: the player's neck
+// and head (models.js playerHead, the same look as the sleeper in the bedroom) on the shirt's collar. pos: the eyes.
 function standingSelf(pos, yaw) {
   const me = makePlayerBody(); me.userData.relax(0.1);
-  const h = makeHuman(1, 0xc8d0e0, { hair: 0x3b2a1f }); h.updateMatrixWorld(true);
-  const neck = h.userData.neck, m = neck.matrixWorld.clone();
-  const wrap = new THREE.Group(); wrap.position.set(0, -1.59, 0.095); wrap.rotation.y = PI; me.add(wrap);
-  neck.removeFromParent(); m.decompose(neck.position, neck.quaternion, neck.scale); wrap.add(neck);
+  const { wrap, neck } = playerHead(); me.add(wrap);
+  me.userData.neckSkin.visible = false;   // the first-person throat and collarbone strips: the head's own neck replaces them
   me.position.copy(pos); me.rotation.y = yaw; me.updateMatrixWorld(true);
   return { me, head: neck };
 }
@@ -1861,7 +1858,7 @@ export async function control() {
       await say('The thread pulls tight through your hand. Where it touches you it turns to gold.');
       G.wove = true;
     } else {
-      await say(touched === goldBead ? 'Then they reach past you, and take the thread themselves.' : 'Then they turn back to the one thread they want.');
+      await say(touched === goldBead ? 'Then they turn their head back, and every arm takes up the weave again without you.' : 'Then they turn back to the one thread they want.');
       tween(0.8, (k) => { S.pause = 1 - k; });
     }
     // it goes back to its thread; your hand comes down

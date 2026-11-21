@@ -1,7 +1,8 @@
 // Act 4: the crossroads room and the four rooms that lead off it.
-import { THREE, lookToward, E, G, $, on, wait, until, tween, lerp, say, hint, bar, fade, note, choose, prompt,
+import { THREE, lookToward, E, G, $, on, wait, until, tween, lerp, say, hint, bar, gazeRing, fade, note, choose, prompt,
   setView, moveView, angleTo, aimAt, clearScene, discard, unsteady, t as tr } from '../engine.js';
 import { A } from '../audio.js';
+import { buildVesselHall } from './vessels.js';
 import { buildBedroom, makeGrey, makeMantis, idleMantis, makeHuman, idleHuman, makePlayerBody, aimGrey, humanGaze } from '../models.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -1023,20 +1024,8 @@ async function classroom() {
   // what to do is shown on the orb itself (that looking at it is what changes it is otherwise easy to miss): a ring round
   // it fills as it changes and brightens while your eyes are on it, a dot marks where your eyes are, and a faint line
   // runs from the dot to the orb whenever you have lost it. On a phone, FOCUS (E.gazeAt) eases your view onto it.
-  const gz = $('gaze'), gzDot = $('gazeDot'), gzLine = $('gazeLine'), gv = V(0, 0, 0);
-  gz.style.display = gzDot.style.display = 'block'; E.gazeAt = orb.position;
-  const gaze = (p, aimed, snapped, col) => {
-    gv.copy(orb.position).project(E.camera);
-    const W = innerWidth, H = innerHeight, x = (gv.x + 1) / 2 * W, y = (1 - gv.y) / 2 * H, behind = gv.z > 1;
-    const d = E.camera.position.distanceTo(orb.position), r = Math.max(26, Math.min(160, 0.3 / d / Math.tan(E.camera.fov * Math.PI / 360) * H / 2));
-    gz.style.display = behind ? 'none' : 'block';
-    gz.style.width = gz.style.height = (2 * r).toFixed(0) + 'px'; gz.style.transform = `translate(${(x - r).toFixed(1)}px, ${(y - r).toFixed(1)}px)`;
-    gz.style.setProperty('--p', (Math.min(1, p) * 100).toFixed(1) + '%'); gz.style.setProperty('--c', col);
-    gz.classList.toggle('on', aimed); gz.classList.toggle('snap', snapped);
-    const dx = x - W / 2, dy = y - H / 2, len = Math.hypot(dx, dy) - r - 6;
-    gzLine.style.display = !aimed && !behind && len > 12 ? 'block' : 'none';
-    gzLine.style.width = Math.max(0, len).toFixed(0) + 'px'; gzLine.style.transform = `rotate(${Math.atan2(dy, dx).toFixed(3)}rad)`;
-  };
+  E.gazeAt = orb.position;
+  const gaze = (p, aimed, snapped, col) => gazeRing(orb.position, { p, aimed, snapped, col, r: { world: 0.3 } });
   // a change of shape is seen happening: it shrinks and spins, takes the new shape at its smallest, and swells back
   let morph = 0, pending = -1; const MORPH = 0.8;
   const reshape = (s) => {
@@ -1076,7 +1065,7 @@ async function classroom() {
   });
   bar(null); hint(''); note('orb'); G.lucidity += 0.06;
   if (pending >= 0) reshape(pending); orb.scale.setScalar(1);
-  gz.style.display = gzDot.style.display = gzLine.style.display = 'none'; E.gazeAt = null; E.steady = false;
+  gazeRing(null); E.gazeAt = null; E.steady = false;
   A.release();
   const o0 = orb.position.clone();
   await tween(2.5, (k) => orb.position.lerpVectors(o0, V(0, 1.3, 0.5), k));
@@ -1981,70 +1970,16 @@ async function containers() {
   E.scene.fog = new THREE.Fog(0x020807, 3, 20);
   shaderScene();
   const g = new THREE.Group(); E.scene.add(g);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(5, 30), sm(HALL_FLOOR)); floor.rotation.x = -Math.PI / 2; floor.position.z = -11; g.add(floor);
-  const wallM = sm(HALL_WALL);
-  for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(30, 3.8), wallM); w.position.set(s * 2.5, 1.9, -11); w.rotation.y = -s * Math.PI / 2; g.add(w); }
-  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(5, 30), wallM); ceil.rotation.x = Math.PI / 2; ceil.position.set(0, 3.8, -11); g.add(ceil);
+  // the hall and its vessels, with the forms inside them (js/scenes/vessels.js); these lights are for the child and the grey
+  const hall = buildVesselHall(g, { sm, TIME, FOGU, ADD, pxScale });
   g.add(new THREE.HemisphereLight(0x7fffd0, 0x06100e, 0.5));
   for (const z of [-6, -15]) { const l = new THREE.PointLight(0x4fffc8, 5, 9, 1.6); l.position.set(0, 2.6, z); g.add(l); }
-  // the vessels, instanced: base, fluid, the dark thing inside, glass, cap, lit rings, pipes
-  const N = 18, P = [];
-  for (let i = 0; i < 9; i++) for (const s of [-1, 1]) P.push([s * 1.75, VZ(i), i, s]);
-  const dummy = new THREE.Object3D();
-  const inst = (geo, mat, f, count = N) => {
-    const m = new THREE.InstancedMesh(geo, mat, count);
-    for (let j = 0; j < count; j++) { dummy.position.set(0, 0, 0); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); f(j); dummy.updateMatrix(); m.setMatrixAt(j, dummy.matrix); }
-    g.add(m); return m;
-  };
-  const capM = std(0x39454a, { metalness: 0.9, roughness: 0.35 });
-  inst(lathe([[0, 0], [0.47, 0], [0.47, 0.05], [0.43, 0.08], [0.43, 0.24], [0.39, 0.3], [0, 0.3]], 40), capM, (j) => dummy.position.set(P[j][0], 0, P[j][1]));
-  inst(lathe([[0, 0], [0.4, 0], [0.41, 0.02], [0.41, 0.12], [0.37, 0.16], [0.3, 0.2], [0.12, 0.22], [0.1, 0.3], [0, 0.3]], 40), capM, (j) => dummy.position.set(P[j][0], 1.99, P[j][1]));
-  const seedG = lathe([[0, -0.19], [0.08, -0.17], [0.11, -0.08], [0.1, 0.03], [0.06, 0.09], [0.075, 0.13], [0.07, 0.18], [0.03, 0.21], [0, 0.215]], 24);
-  const seedPose = (j, h, y) => { dummy.position.set(P[j][0], h, P[j][1]); dummy.rotation.set(0, y, 0.25 * P[j][3]); dummy.scale.set(1, 1, 1); };
-  const seedI = inst(seedG, sm(SEED, {}, { displace: BOB }), (j) => seedPose(j, 1.0 + (P[j][2] % 3) * 0.08, j * 1.3));
-  // low lucidity: look back and the dark form in a vessel hangs at another height, leaning another way. Heights stay
-  // in the range they already use (1.00-1.16), so the cord from the cap always meets it.
-  for (let j = 0; j < N; j++) unsteady(seedI, (k) => {
-    if (k) seedPose(j, 1.0 + Math.random() * 0.16, Math.random() * Math.PI * 2); else seedPose(j, 1.0 + (P[j][2] % 3) * 0.08, j * 1.3);
-    dummy.updateMatrix(); seedI.setMatrixAt(j, dummy.matrix); seedI.instanceMatrix.needsUpdate = true; seedI.boundingSphere = null;   // bounds recomputed: never stale
-  }, { r: 0.42, at: V(P[j][0], 1.15, P[j][1]) });
-  const fluid = inst(new THREE.CylinderGeometry(0.335, 0.335, 1.62, 40, 1, true), sm(FLUID, {}, { transparent: true, depthWrite: false }), (j) => dummy.position.set(P[j][0], 1.15, P[j][1]));
-  const glassI = inst(new THREE.CylinderGeometry(0.36, 0.36, 1.7, 40, 1, true), sm(GLASS, {}, ADD), (j) => dummy.position.set(P[j][0], 1.15, P[j][1]));
-  fluid.renderOrder = 1; glassI.renderOrder = 3;
-  // light hanging round each vessel; a fine cord from each dark form up to its cap
-  const haloI = inst(new THREE.CylinderGeometry(0.62, 0.62, 2.0, 32, 1, true), sm(SHAFT, { uColor: { value: dcol(0x5fffd0) }, uAmt: { value: 0.07 } }, { ...ADD, side: THREE.DoubleSide }), (j) => dummy.position.set(P[j][0], 1.15, P[j][1]));
-  haloI.renderOrder = 4;
-  inst(new THREE.CylinderGeometry(0.005, 0.005, 0.72, 5), sm(SEED), (j) => dummy.position.set(P[j][0], 1.64, P[j][1]));
-  for (const [y, amt] of [[0.14, 0.5], [0.42, 0.25]]) {
-    const mist = new THREE.Mesh(new THREE.PlaneGeometry(5, 30), sm(GROUND_HAZE, { uAmt: { value: amt } }, { ...ADD, side: THREE.DoubleSide }));
-    mist.rotation.x = -Math.PI / 2; mist.position.set(0, y, -11); mist.renderOrder = 5; g.add(mist);
+  {
+    const mist = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 24.7), sm(GROUND_HAZE, { uAmt: { value: 0.3 } }, { ...ADD, side: THREE.DoubleSide }));
+    mist.rotation.x = -Math.PI / 2; mist.position.set(0, 0.14, -10.05); mist.renderOrder = 6; g.add(mist);
   }
-  g.add(motes(300, V(0, 1.8, -9), V(2.2, 1.7, 9.5), 0x7fffd0, 0.8));
-  const ringM = basic(0x6fffd8);
-  const torus = new THREE.TorusGeometry(0.372, 0.016, 8, 48); torus.rotateX(Math.PI / 2);
-  inst(torus, ringM, (j) => dummy.position.set(P[j >> 1][0], j % 2 ? 1.96 : 0.33, P[j >> 1][1]), N * 2);
-  const curve = new THREE.CatmullRomCurve3([V(0, 0, 0), V(0, 0.35, 0), V(0.1, 0.7, 0), V(0.5, 0.95, 0)]);
-  const pipeR = new THREE.TubeGeometry(curve, 20, 0.035, 8), pipeL = pipeR.clone().scale(-1, 1, 1);
-  const pipeM = std(0x4a565c, { metalness: 0.85, roughness: 0.35, side: THREE.DoubleSide });
-  for (const [geo, s] of [[pipeR, 1], [pipeL, -1]]) inst(geo, pipeM, (j) => dummy.position.set(s * 1.75, 2.28, VZ(j)), 9);
-  const condG = new THREE.CylinderGeometry(0.09, 0.09, 26, 12); condG.rotateX(Math.PI / 2);
-  const cableG = new THREE.CylinderGeometry(0.035, 0.035, 26, 8); cableG.rotateX(Math.PI / 2);
-  for (const s of [-1, 1]) {
-    const c1 = new THREE.Mesh(condG, pipeM); c1.position.set(s * 2.25, 3.25, -10); g.add(c1);
-    const c2 = new THREE.Mesh(cableG, pipeM); c2.position.set(s * 2.3, 3.0, -10); g.add(c2);
-    const c3 = new THREE.Mesh(cableG, pipeM); c3.position.set(s * 2.2, 0.04, -10); g.add(c3);
-  }
-  // bubbles rising in every vessel, animated on the GPU
-  const NB = N * 16, bpos = new Float32Array(NB * 3), bb = new Float32Array(NB * 4);
-  for (let j = 0; j < NB; j++) {
-    const v = P[j % N], a = Math.random() * Math.PI * 2, r = Math.random() * 0.28;
-    bpos.set([Math.cos(a) * r, 0.012 + Math.random() * 0.03, Math.sin(a) * r], j * 3);
-    bb.set([v[0], v[1], Math.random(), 0.12 + Math.random() * 0.3], j * 4);
-  }
-  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(bpos, 3)); bg.setAttribute('aB', new THREE.BufferAttribute(bb, 4));
-  const bubbles = new THREE.Points(bg, new THREE.ShaderMaterial({ vertexShader: BUB_V, fragmentShader: BUB_F, uniforms: { uTime: TIME, uScale: { value: pxScale() }, ...FOGU }, ...ADD }));
-  bubbles.frustumCulled = false; bubbles.renderOrder = 2; g.add(bubbles);
-  on((dt, t) => { const k = 0.75 + 0.25 * Math.sin(t * 1.4); ringM.color.setRGB(0.16 * k, 1.0 * k, 0.7 * k); });
+  g.add(motes(260, V(0, 1.8, -9), V(2.2, 1.7, 9.5), 0x7fffd0, 0.7));
+  const pipeM = std(0x2a3238, { metalness: 0.6, roughness: 0.4 });
   // the plate over the hall, hung from the ceiling
   const pTex = plateTex();
   const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.45), basic(0xffffff, { map: pTex })); plate.position.set(0, 2.5, -1.4); g.add(plate);
@@ -2052,11 +1987,15 @@ async function containers() {
   unsteady(plate, (k, n) => { drawPlate(pTex.image.getContext('2d'), k ? 7 + n * 1013 : 7); pTex.needsUpdate = true; });
   for (const x of [-0.7, 0.7]) { const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.1, 6), pipeM); rod.position.set(x, 3.27, -1.42); g.add(rod); }
   const child = makeHuman(KNOWN_KID.scale, KNOWN_KID.color, KNOWN_KID.hair); child.position.set(0, 0, -19.5); g.add(child);
-  const grey = makeGrey(); grey.position.set(0.8, 0, -19.9); g.add(grey);
+  // the grey stands behind the child, half turned to them, and watches the child, never you (the reveal's memory of this
+  // hall turns on it: there they are seen watching you)
+  const grey = makeGrey(); grey.position.set(0.8, 0, -19.9); grey.rotation.y = -0.45; g.add(grey);
+  const kidHead = V(0, 0, 0);
   const toy = new THREE.Mesh(new THREE.TetrahedronGeometry(0.09), sm(JEWEL, { uColor: { value: dcol(0xffd27a) }, uGlow: { value: 1.2 } })); toy.position.set(0, 0.72, -19.15); g.add(toy);
   const tl = new THREE.PointLight(0xffc24a, 1.5, 4); toy.add(tl);
   const tHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffc24a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.7 })); tHalo.scale.setScalar(0.5); toy.add(tHalo);
   on((dt) => { toy.rotation.y += dt * 1.2; toy.rotation.x += dt * 0.7; });
+  on(() => { toy.getWorldPosition(hall.toyU.uToyP.value); hall.toyU.uToyI.value = tl.intensity * 0.35; });   // its warm light on the hall's own surfaces
   let giftHeld = false; const gift = A.aura(293.66); let giftNear = 0;
   on(() => { giftNear = giftHeld ? 1 : Math.max(0, 1 - E.camera.position.distanceTo(toy.position) / 14); gift.set(giftNear * giftNear); });
   // the child stands with both arms out, the thing held up in cupped hands; offer 1 = held out, 0 = arms down
@@ -2072,7 +2011,7 @@ async function containers() {
   }
   let offer = 1, toyFollows = true;
   const childGaze = humanGaze(child), CHILD_REST = { y: 0, p: 0.1 };
-  if (window.UAP) window.UAP.containers = { child, childGaze };
+  if (window.UAP) window.UAP.containers = { child, childGaze, hall };
   on((dt, t) => {
     const b = Math.sin(t * 1.1) * 0.02;
     cu.armL.rotation.set(-1.05 * offer + b, 0, 0.17 * offer - 0.08); cu.armR.rotation.set(-1.05 * offer + b, 0, -0.17 * offer + 0.08);   // (a positive z on the left arm swings it in: held out, the arms just in from straight ahead; let down, a little out from the sides, clear of the body)
@@ -2080,7 +2019,7 @@ async function containers() {
     // eyes on you the whole time, the head turned to you (humanGaze: aimed at the camera itself)
     childGaze.update(dt, E.camera.position, 0.9, CHILD_REST); cu.chest.scale.z = 1 + Math.sin(t * 1.6) * 0.018;
     if (toyFollows) toy.position.set(toyHeld.x, lerp(0.4, toyHeld.y, offer) + b * 0.3, lerp(toyHeld.z - 0.2, toyHeld.z, offer));
-    aimGrey(grey, E.camera.position, 0.8);
+    cu.head.getWorldPosition(kidHead); aimGrey(grey, kidHead, 1, true);
   });
   setView(0, 1.6, 1, 0, 0); E.mode = 'locked'; E.unsteady = true; E.heart = true; E.surface = 'hall';
   E.bounds = (x, z) => Math.abs(x) < 1.15 && z < 1.6 && z > -18.2;

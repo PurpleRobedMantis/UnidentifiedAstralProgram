@@ -1,5 +1,5 @@
 // Acts 1-3: the bedroom at 3:00, the passage through the wall, the white room.
-import { THREE, lookToward, E, G, $, on, wait, until, tween, lerp, say, prompt, hint, bar, fade, note, nights,
+import { THREE, lookToward, E, G, $, on, wait, until, tween, lerp, say, prompt, hint, bar, gazeRing, fade, note, nights,
   setView, moveView, lookingAt, angleTo, aimAt, clearScene, discard, warm, t as tr } from '../engine.js';
 import { A } from '../audio.js';
 import { T, buildBedroom, makeGrey, stepGrey, makeMantis, idleMantis, makeHuman, makePlayerBody, aimGrey, idleGrey, holdGrey, gripGrey, pointGrey, makeWand, clearGreyArm, greyArmHits, GREY_GAIT, heldSegment } from '../models.js';
@@ -1754,7 +1754,7 @@ export async function exam() {
     const off = on((dt) => {
       tt += dt;
       if (tt > next) { next = tt + 0.5 + Math.random() * 0.7; const a = Math.random() * 6.28, m = 0.22 + G.fear * 0.55; E.pull.yaw = Math.cos(a) * m; E.pull.pitch = Math.sin(a) * m; }
-      const onIt = angleTo(face.position) < 0.15;
+      const ON = 0.15, onIt = angleTo(face.position) < ON;
       if (onIt) { score += dt; G.fear -= dt * 0.03; } else G.fear += dt * 0.05;
       const k = Math.min(1, score / 8);
       // the room's light drains away; the face does not come any nearer, it only breathes a few millimetres
@@ -1763,11 +1763,13 @@ export async function exam() {
       dim.material.opacity = Math.min(1, k * 1.15);
       em.emissiveIntensity = Math.max(em.emissiveIntensity, 1.4 * k * k);
       face.position.copy(target).addScaledVector(fwd, 0.004 * Math.sin(tt * 1.3)); faceAt();
-      bar(k);
+      // what to do is shown round their face (the ring carries the progress, so no bar), as with the classroom orb: the ring is the zone your eyes must stay in
+      // (the same angle as the test above), filling as the room drains; off it, a line runs from your view back to it
+      gazeRing(face.position, { p: k, aimed: onIt, col: '#d8e6ff', r: Math.tan(ON) / Math.tan(E.camera.fov * Math.PI / 360) * innerHeight / 2, max: innerHeight * 0.45 });
       if (tt > 14 || score >= 8) { off(); res(); }
     });
   });
-  E.pull.yaw = E.pull.pitch = 0; E.gazeAt = null; bar(null); hint(''); E.mode = 'locked';
+  E.pull.yaw = E.pull.pitch = 0; E.gazeAt = null; bar(null); gazeRing(null); hint(''); E.mode = 'locked';
   note('mindscan');
   if (score >= 6.5) {
     G.stare = true; G.lucidity += 0.15; G.fear = 0.2; G.trust += 1;

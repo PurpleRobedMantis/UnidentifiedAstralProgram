@@ -1799,14 +1799,14 @@ function personHead(child, style) {
 //   w, len (head width and length factors), jaw, chin, chinW, cheek, full (soft tissue), brow, noseL, noseW, bridge (a hump),
 //   tip, lips, mouthW, eye (size), eyeGap, tilt (outer corners up), lid (more open), ear, browT (thickness), arch,
 //   hair 'short'|'crop'|'long'|'tied'|'bald' (a fringe round the back)|'receding'|'shaved', beard 'full'|'moustache'|'goatee',
-//   stubble 0..1, tone (skin colour), hairCol, beardCol, eyeCol.
+//   stubble 0..1, shut (1: lids closed, as in sleep), tone (skin colour), hairCol, beardCol, eyeCol.
 const skinTexA = () => ctex('skinA', 256, 256, (g, w, h) => {
   seed(122); g.fillStyle = '#f4ece8'; g.fillRect(0, 0, w, h);
   for (let i = 0; i < 160; i++) { const x = rr(0, w), y = rr(0, h), r = rr(8, 40), gr = g.createRadialGradient(x, y, 0, x, y, r), k = rand(); gr.addColorStop(0, k < 0.45 ? 'rgba(210,90,80,.035)' : k < 0.7 ? 'rgba(90,110,170,.02)' : 'rgba(255,250,240,.045)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; wrapAt(g, w, h, x, y, r, () => g.fillRect(x - r, y - r, r * 2, r * 2)); }
   for (let i = 0; i < 40; i++) { const x = rr(0, w), y = rr(0, h), r = rr(0.6, 1.4); g.fillStyle = 'rgba(140,80,50,.16)'; wrapAt(g, w, h, x, y, r, () => { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }); }
   for (let i = 0; i < 3000; i++) { g.fillStyle = rand() < 0.5 ? 'rgba(90,40,30,.06)' : 'rgba(255,255,255,.07)'; g.fillRect(rr(0, w) | 0, rr(0, h) | 0, 1, 1); }
 }, [2, 1]);
-const FACE0 = { fem: 0, age: 0.3, w: 1, len: 1, jaw: 0, chin: 0, chinW: 0, cheek: 0, full: 0, brow: 0, noseL: 0, noseW: 0, bridge: 0, tip: 0, lips: 0, mouthW: 0, eye: 0, eyeGap: 0, tilt: 0, lid: 0, ear: 0, browT: 0, arch: 0, hair: 'short', beard: null, stubble: 0 };
+const FACE0 = { fem: 0, age: 0.3, w: 1, len: 1, jaw: 0, chin: 0, chinW: 0, cheek: 0, full: 0, brow: 0, noseL: 0, noseW: 0, bridge: 0, tip: 0, lips: 0, mouthW: 0, eye: 0, eyeGap: 0, tilt: 0, lid: 0, ear: 0, browT: 0, arch: 0, hair: 'short', beard: null, stubble: 0, shut: 0 };
 function faceDims(face) {
   const f = { ...FACE0, ...face }, fem = f.fem, age = f.age, w = f.w * (1 - 0.035 * fem), L = f.len * (1 - 0.03 * fem);
   const S = { f, fem, age, T: 0.113 * L, B: 0.116 * L, pf: 0.8 };
@@ -1830,6 +1830,9 @@ function faceDims(face) {
   S.lipF = 1 + 0.25 * f.lips + 0.2 * fem - 0.15 * age; S.mW = 1 + 0.1 * f.mouthW - 0.05 * fem;
   { const nyE = yToNy(-0.016, S); S.earY = -0.016; S.earZ = profileAt(S.Zc, nyE) + 0.002; S.earB = 0.0015; }
   S.openU = 0.4 + 0.05 * f.lid - 0.04 * age; S.openL = 0.3; S.tilt = 0.06 + 0.09 * f.tilt;
+  // closed (shut): no lid shells; the skin itself runs over the socket with the eyeball's soft bulge in it (shutB, faceDz),
+  // and the lash line lies on it a little under the eye's middle (the eyeball meshes are hidden, see humanNeckHead)
+  S.shutB = f.shut ? 0.003 : 0; if (f.shut) S.openU = -0.1;
   return S;
 }
 // height from ny: smooth through the eyes' level (ny 0), T at the crown, -B under the chin; and back
@@ -1844,7 +1847,7 @@ function skullPt(nx, ny, nz, o, S) {
 // the face's relief over the skull's front, by height above the eyes (y) and distance from the middle (x)
 function faceDz(x, y, S) {
   const ax = Math.abs(x), e = S.ey, g = (px, cx, cy, sx, sy) => Math.exp(-(((px - cx) / sx) ** 2) - (((y - cy) / sy) ** 2));
-  let dz = S.brow * g(ax, 0.028, e + 0.02, 0.019, 0.0075) + S.brow * 0.5 * g(x, 0, e + 0.016, 0.01, 0.009) - S.sock * g(ax, S.ex, e, 0.0145, 0.0105);
+  let dz = S.brow * g(ax, 0.028, e + 0.02, 0.019, 0.0075) + S.brow * 0.5 * g(x, 0, e + 0.016, 0.01, 0.009) - S.sock * g(ax, S.ex, e, 0.0145, 0.0105) + S.shutB * g(ax, S.ex, e - 0.0005, 0.0095, 0.0068);
   // the nose: the bridge from its root between the eyes down to the tip, then under the tip back to the lip
   let nh, hw;
   if (y >= S.yn) { nh = S.nRoot * Math.exp(-(((y - S.yn) / 0.008) ** 2)); hw = 0.006 * S.nW; }
@@ -1933,7 +1936,7 @@ function adultHead(S) {
     for (const s of [-1, 1]) {
       const C = eyeC.clone(); C.x *= s; const er = S.er;
       eyeW.push(ball(C.x, C.y, C.z, er, er, er, 14, 10)); iris.push(ball(C.x, C.y, C.z + er - 0.0012, 0.0062, 0.0062, 0.0022, 14, 6)); pupil.push(ball(C.x, C.y, C.z + er + 0.0006, 0.0026, 0.0026, 0.0008, 10, 4));
-      for (const upper of [true, false]) {
+      if (!S.shutB) for (const upper of [true, false]) {
         lidParts.push([faceOut(grid(14, 6, (u, w, o) => {
           const a = (u - 0.5) * TAU, win = Math.abs(a) < 1.3 ? Math.cos(a / 1.3 * PI / 2) ** 0.6 : 0, ec = S.tilt * Math.sin(a) * s;
           const edge = upper ? ec + S.openU * win : ec - S.openL * win, el = upper ? PI / 2 + (edge - PI / 2) * w : -PI / 2 + (edge + PI / 2) * w, r = er * (1.075 - 0.05 * smooth(0.6, 1, w) * win);
@@ -1946,6 +1949,7 @@ function adultHead(S) {
     for (const s of [-1, 1]) {
       const C = eyeC.clone(); C.x *= s; const er = S.er, pts = [];
       for (let i = 0; i <= 10; i++) { const a = (-1.22 + 2.44 * i / 10), win = Math.cos(a / 1.3 * PI / 2) ** 0.6, el = S.tilt * Math.sin(a) * s + S.openU * win, rr2 = er * (1.075 - 0.05 * win) + 0.0007;
+        if (S.shutB) { frontAt(C.x + er * Math.cos(el) * Math.sin(a), C.y + er * Math.sin(el) - 0.0004, S, w2); pts.push([w2.x, w2.y, w2.z + 0.0004]); continue; }   // on the closed lid's skin
         pts.push([C.x + rr2 * Math.cos(el) * Math.sin(a), C.y + rr2 * Math.sin(el) - 0.0004, C.z + rr2 * Math.cos(el) * Math.cos(a)]); }
       LL.push([softTube(pts, (t) => { const k = Math.sin(PI * t) ** 0.5; return [0.0012 * (0.4 + 0.6 * k) * (1 + 0.3 * S.fem), 0.0007 * (0.4 + 0.6 * k)]; }, 6, 14, 0.06, 0.06, [0, 1, 0])]);
     }
@@ -2218,15 +2222,50 @@ const faceSkinMat = (tone) => tone == null ? Mt('humanSkinFace', () => std(0xc9a
 const lipMat2 = (tone) => tone == null ? Mt('lips2', () => std(0xb27a70, { roughness: 0.55, map: skinTex() })) : Mt(`lips2${tone}`, () => std(new THREE.Color(tone).multiply(new THREE.Color(0.86, 0.62, 0.62)).getHex(), { roughness: 0.55, map: skinTex() }));
 const skinMatT = (tone) => tone == null ? skinMat() : Mt(`humanSkin${tone}`, () => std(tone, { roughness: 0.64, map: skinTex() }));
 
+// a person's colours and face from makeHuman's colour and options: hair and iris picked from the clothes colour unless
+// given, the adult face's measurements (faceDims) and skin tone
+function humanLook(color, opt, child) {
+  const c = new THREE.Color(color);
+  const fIn = child ? null : opt.face ?? opt.outfit?.face ?? (opt.hairStyle != null ? { hair: ['short', 'crop', 'long'][opt.hairStyle] } : {});
+  const hash = (c.r * 7 + c.g * 13 + c.b * 5) * 10, hc = fIn?.hairCol ?? opt.hair ?? HAIR[hash % HAIR.length | 0], eyeC = fIn?.eyeCol ?? [0x4a3324, 0x5a6f86, 0x3d2a1c, 0x5b6a45][(hash * 1.9 | 0) % 4];
+  const S = child ? null : faceDims(fIn.beard ? { ...fIn, beardCol: fIn.beardCol ?? hc } : fIn), tone = S ? S.f.tone ?? null : null;
+  return { c, hash, hc, eyeC, S, tone };
+}
+// makeHuman's neck pivot (at K.neckY in its body) with the head on it. Head children 0..5: skin, hair, iris, pupil, lips,
+// eye white (scenes index them); then nostril shade, lashes, beard, brows. A shut face (face.shut) hides the eyeball
+// meshes: the closed lids cover the eye.
+function humanNeckHead(K, P, Hd, S, tone, hc, eyeC, child) {
+  const neck = new THREE.Group(); neck.position.set(0, K.neckY, 0);
+  neck.add(new THREE.Mesh(P.neck, skinMatT(tone)));
+  const head = new THREE.Group(); head.position.y = 0.15; neck.add(head);
+  head.add(new THREE.Mesh(Hd.skin, Hd.skin.attributes.color ? faceSkinMat(tone) : skinMat()), new THREE.Mesh(Hd.hair, Hd.hairA ? Mt(`hairA${S.key}${hc}`, () => std(hc, { roughness: 0.75, map: hairTex(), alphaMap: Hd.hairA, transparent: true, alphaTest: 0.02 })) : hairMat(hc)), new THREE.Mesh(Hd.iris, Mt(`irisC${eyeC}`, () => std(eyeC, { roughness: 0.25 }))), new THREE.Mesh(Hd.pupil, irisMat()), new THREE.Mesh(Hd.lips, lipMat2(tone)), new THREE.Mesh(Hd.eyeW, child ? eyeWhiteMat() : Mt('eyeWhiteA', () => std(0xcfc6b8, { roughness: 0.3 }))));
+  if (Hd.shade) head.add(new THREE.Mesh(Hd.shade, Mt('faceShade', () => std(0x4a2820, { roughness: 0.9 }))));   // nostrils and the line between the lips
+  if (Hd.lash) head.add(new THREE.Mesh(Hd.lash, Mt(`lash${hc}`, () => std(new THREE.Color(hc).multiplyScalar(0.45).getHex(), { roughness: 0.8 }))));   // after the six above (scenes index them)
+  if (Hd.beard) head.add(new THREE.Mesh(Hd.beard, Mt(`beard${S.key}`, () => new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.75, map: Hd.beardT, vertexColors: true, transparent: true, depthWrite: false, sheen: 0.6, sheenRoughness: 0.45, sheenColor: new THREE.Color(S.f.beardCol ?? 0x2b1d14).lerp(new THREE.Color(0xffd8a8), 0.3), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }))));   // the hair is in its texture (soft-edged, blended), each shell's shade and cover in its vertex colours; sheen lightens it where the light grazes
+  if (Hd.brow) head.add(new THREE.Mesh(Hd.brow, Mt(`browA${hc}`, () => std(new THREE.Color(hc).multiplyScalar(0.7).getHex(), { roughness: 0.85, map: browTex(), transparent: true, alphaTest: 0.03, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }))));   // hairs drawn in the texture
+  if (S && S.f.shut) for (const i of [2, 3, 5]) head.children[i].visible = false;
+  return { neck, head };
+}
+// The player's own look, the one source for every view of the player from outside (control.js standingSelf, the sleeper
+// in buildBedroom): makeHuman's colour and options. playerHead(face) gives makeHuman's neck and head for it, set in the
+// makePlayerBody frame (the player body is the human body moved so the eyes are at its origin: down 1.59 m, back 9.5 cm,
+// turned round), so adding wrap to a makePlayerBody puts the neck on its collar; face adds face options (e.g. { shut: 1 }).
+// Only the neck and head are built; geometry and materials are the cached ones.
+export const PLAYER_LOOK = { col: 0xc8d0e0, opt: { hair: 0x3b2a1f } };
+export function playerHead(face) {
+  const o = face ? { ...PLAYER_LOOK.opt, face: { ...PLAYER_LOOK.opt.face, ...face } } : PLAYER_LOOK.opt;
+  const L = humanLook(PLAYER_LOOK.col, o, false), K = personDims(false);
+  const { neck, head } = humanNeckHead(K, personBody(false), adultHead(L.S), L.S, L.tone, L.hc, L.eyeC, false);
+  const wrap = new THREE.Group(); wrap.position.set(0, -1.59, 0.095); wrap.rotation.y = PI; wrap.add(neck);
+  return { wrap, neck, head };
+}
+
 // a person: neck, shoulders, elbows, hips and knees are pivots
 // (userData neck, head, armL/armR, foreL/foreR, legL/legR, kneeL/kneeR, chest, body); call idleHuman to breathe.
 // opt.seated sits them on a stool (see sitHuman). An adult takes opt.face (or opt.outfit.face): their own head (faceDims, adultHead).
 export function makeHuman(scale = 1, color = 0x3d4a66, opt = {}) {
   const child = opt.child ?? scale < 0.8, K = personDims(child), g = new THREE.Group();
-  const c = new THREE.Color(color), dark = c.clone().multiplyScalar(0.55).getHex(), cloth = clothMat(color), trouser = clothMat(dark);
-  const fIn = child ? null : opt.face ?? opt.outfit?.face ?? (opt.hairStyle != null ? { hair: ['short', 'crop', 'long'][opt.hairStyle] } : {});
-  const hash = (c.r * 7 + c.g * 13 + c.b * 5) * 10, hc = fIn?.hairCol ?? opt.hair ?? HAIR[hash % HAIR.length | 0], eyeC = fIn?.eyeCol ?? [0x4a3324, 0x5a6f86, 0x3d2a1c, 0x5b6a45][(hash * 1.9 | 0) % 4];
-  const S = child ? null : faceDims(fIn.beard ? { ...fIn, beardCol: fIn.beardCol ?? hc } : fIn), tone = S ? S.f.tone ?? null : null;
+  const { c, hash, hc, eyeC, S, tone } = humanLook(color, opt, child), dark = c.clone().multiplyScalar(0.55).getHex(), cloth = clothMat(color), trouser = clothMat(dark);
   const P = personBody(child), Hd = child ? personHead(child, opt.hairStyle ?? (hash * 3.7 | 0) % HAIR_STYLES.length) : adultHead(S);
   // body: everything from the hips up (and the legs hanging off it), so sitting can lower it
   const body = new THREE.Group(); g.add(body);
@@ -2239,14 +2278,7 @@ export function makeHuman(scale = 1, color = 0x3d4a66, opt = {}) {
     return [hip, knee];
   };
   const [legL, kneeL] = leg(-1), [legR, kneeR] = leg(1);
-  const neck = new THREE.Group(); neck.position.set(0, K.neckY, 0); body.add(neck);
-  neck.add(new THREE.Mesh(P.neck, skinMatT(tone)));
-  const head = new THREE.Group(); head.position.y = 0.15; neck.add(head);
-  head.add(new THREE.Mesh(Hd.skin, Hd.skin.attributes.color ? faceSkinMat(tone) : skinMat()), new THREE.Mesh(Hd.hair, Hd.hairA ? Mt(`hairA${S.key}${hc}`, () => std(hc, { roughness: 0.75, map: hairTex(), alphaMap: Hd.hairA, transparent: true, alphaTest: 0.02 })) : hairMat(hc)), new THREE.Mesh(Hd.iris, Mt(`irisC${eyeC}`, () => std(eyeC, { roughness: 0.25 }))), new THREE.Mesh(Hd.pupil, irisMat()), new THREE.Mesh(Hd.lips, lipMat2(tone)), new THREE.Mesh(Hd.eyeW, child ? eyeWhiteMat() : Mt('eyeWhiteA', () => std(0xcfc6b8, { roughness: 0.3 }))));
-  if (Hd.shade) head.add(new THREE.Mesh(Hd.shade, Mt('faceShade', () => std(0x4a2820, { roughness: 0.9 }))));   // nostrils and the line between the lips
-  if (Hd.lash) head.add(new THREE.Mesh(Hd.lash, Mt(`lash${hc}`, () => std(new THREE.Color(hc).multiplyScalar(0.45).getHex(), { roughness: 0.8 }))));   // after the six above (scenes index them)
-  if (Hd.beard) head.add(new THREE.Mesh(Hd.beard, Mt(`beard${S.key}`, () => new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.75, map: Hd.beardT, vertexColors: true, transparent: true, depthWrite: false, sheen: 0.6, sheenRoughness: 0.45, sheenColor: new THREE.Color(S.f.beardCol ?? 0x2b1d14).lerp(new THREE.Color(0xffd8a8), 0.3), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }))));   // the hair is in its texture (soft-edged, blended), each shell's shade and cover in its vertex colours; sheen lightens it where the light grazes
-  if (Hd.brow) head.add(new THREE.Mesh(Hd.brow, Mt(`browA${hc}`, () => std(new THREE.Color(hc).multiplyScalar(0.7).getHex(), { roughness: 0.85, map: browTex(), transparent: true, alphaTest: 0.03, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }))));   // hairs drawn in the texture
+  const { neck, head } = humanNeckHead(K, P, Hd, S, tone, hc, eyeC, child); body.add(neck);
   const arm = (s) => {
     const sh = new THREE.Group(); sh.position.set(s * K.sh[0], K.sh[1], K.sh[2]); sh.add(new THREE.Mesh(s > 0 ? P.upperR : P.upperL, cloth)); body.add(sh);
     const el = new THREE.Group(); el.position.set(s * K.el[0], K.el[1], K.el[2]); el.add(new THREE.Mesh(s > 0 ? P.foreR : P.foreL, cloth)); sh.add(el);
@@ -2558,7 +2590,7 @@ export function makePlayerBody() {
   const g = new THREE.Group();
   const torso = new THREE.Group(); g.add(torso);
   const chest = new THREE.Group(); torso.add(chest);
-  chest.add(new THREE.Mesh(P.torso, pj), new THREE.Mesh(P.neckSkin, hs));
+  const neckSkin = new THREE.Mesh(P.neckSkin, hs); chest.add(new THREE.Mesh(P.torso, pj), neckSkin);
   const side = (s) => {
     const L = s < 0;
     const arm = new THREE.Group(); arm.position.set(s * 0.205, -0.205, 0.095); arm.add(new THREE.Mesh(L ? P.upperL : P.upper, pj)); torso.add(arm);
@@ -2583,7 +2615,7 @@ export function makePlayerBody() {
   };
   const relaxHand = (h, k = 1, th = 0.25) => { for (let f = 0; f < 4; f++) _curl[f] = RELAX[f] * k; h.set(_curl, 0.15, 0.15, th); };
   const u = {
-    armL, armR, foreL, foreR, handL: hL.hand, handR: hR.hand, handRigL: hL, handRigR: hR, legs, torso, chest, marks,
+    armL, armR, foreL, foreR, handL: hL.hand, handR: hR.hand, handRigL: hL, handRigR: hR, legs, torso, chest, neckSkin, marks,
     setHand(sideKey, curls, spread = 0, opp = 0, flex = 0) { hands[sideKey].set(curls, spread, opp, flex); },
     curl(sideKey, c, th = c) { for (let f = 0; f < 4; f++) _curl[f] = c * (0.9 + f * 0.06); const tt = Math.pow(Math.max(0, th), 0.6); hands[sideKey].set(_curl, 0.1 * (1 - c), 0.15 + 0.95 * tt, 0.2 + 0.85 * tt); },
     // The cliché look at the hand, as one continuous motion over t 0..1 (tween about 6 s, linear: easing is inside):
@@ -3041,15 +3073,8 @@ function bedroomParts() {
     // soft things
     P.mattress = merge([[roundedBox(1.6, 0.24, 2.08, 0.05, 4), M(0, 0.43, -0.86)]]);
     P.base = merge([bbox(0, 0.245, -0.86, 1.62, 0.13, 2.1)]);
-    const pillow = sculpt(20, 12, (nx, ny, nz, o) => {
-      const e = (a) => Math.sign(a) * Math.pow(Math.abs(a), 0.45);
-      const x = e(nx) * 0.34, z = e(nz) * 0.21, c = Math.pow(Math.abs(x / 0.34), 3) + Math.pow(Math.abs(z / 0.21), 3);
-      let y = e(ny) * 0.075 * (1 - 0.45 * Math.min(1, c * 0.6));
-      if (ny > 0) y -= 0.03 * Math.exp(-((x / 0.15) ** 2 + (z / 0.1) ** 2));
-      return o.set(x, y, z);
-    });
-    // made bed: the sleeper's pillow in the middle, a second smaller one lying flat beside it
-    P.pillows = merge([[pillow, M(0.04, 0.62, -1.68, 0, 0.03, 0)], [pillow, M(-0.54, 0.618, -1.71, 0, -0.04, 0, 0.78)]]);
+    const pillow = sculpt(20, 12, pillowPt);
+    // made bed: see sleptPillows
     P.pillowsMess = merge([[pillow, M(0.16, 0.625, -1.6, 0.06, 0.42, -0.08)], [pillow, M(-0.42, 0.68, -1.78, -0.7, -0.25, 0.12, 0.92)]]);
     // the bottom sheet, creased, with the hollow where someone lay (only shown once the bed is messed)
     P.sheet = grid(30, 40, (u, v, o) => {
@@ -3077,16 +3102,62 @@ function bedroomParts() {
       const z = -1.58 + v * 0.7, w = Math.max(0, profileAt(LUMPW, z)), h = Math.max(0, profileAt(LUMPH, z)), a = PI * (1 - u);
       return o.set(Math.cos(a) * w, 0.575 + Math.max(0, Math.sin(a)) * h, z);
     }, true);
-    // the sleeper's head on the pillow, chin a little down toward the chest, face turned slightly toward the room; the neck
-    // runs down from it to the pyjama collar of the sleeping body (makePlayerBody, layInBed) under the covers
-    const H = humanParts(), hm = M(0, 0.745, -1.655, -PI / 2 + 0.3, 0.28, 0);
-    P.sleeperSkin = merge([[H.head, hm], [H.neck, hm.clone().multiply(M(0, -0.17, 0.0, 0.25, 0, 0, 1, 1.5, 1))]]);
-    P.sleeperHair = H.hair.clone().applyMatrix4(hm);
-    P.sleeperFace = merge([[H.closed, hm], [H.mouth, hm]]);
     return P;
   });
 }
 
+// a pillow: rounded slab, softly squared corners, a shallow dip in the middle of its top
+function pillowPt(nx, ny, nz, o) {
+  const e = (a) => Math.sign(a) * Math.pow(Math.abs(a), 0.45);
+  const x = e(nx) * 0.34, z = e(nz) * 0.21, c = Math.pow(Math.abs(x / 0.34), 3) + Math.pow(Math.abs(z / 0.21), 3);
+  let y = e(ny) * 0.075 * (1 - 0.45 * Math.min(1, c * 0.6));
+  if (ny > 0) y -= 0.03 * Math.exp(-((x / 0.15) ** 2 + (z / 0.1) ** 2));
+  return o.set(x, y, z);
+}
+// The made bed's pillows: the sleeper's in the middle (finer, so it can take a hollow), a second smaller one lying flat
+// beside it. The middle one's top is pressed down under the posed head and neck (root: their group, posed, with world
+// matrices in the bedroom's frame): the lowest point of the head per 1 cm cell, 4 mm under it, widened into a soft bowl
+// (each cell's height plus 4 m^-1 times the squared distance) and blended into the top with a smooth minimum, so the
+// head lies in its hollow with nothing inside the pillow. The hollow stays when the bed is empty, as a slept-in pillow.
+function sleptPillows(root) {
+  const hi = sculpt(72, 44, pillowPt);
+  // the cloth's weave laid flat over the top in metres (the sphere's own uv runs in rings round the pole at the top's
+  // middle), carried on outward down the sides
+  { const p = hi.attributes.position, uv = hi.attributes.uv;
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), d = Math.max(0, 0.035 - y); uv.setXY(i, (x + Math.sign(x) * d) / 1.4, (z + Math.sign(z) * d) / 0.9); } }
+  hi.applyMatrix4(M(0.04, 0.62, -1.68, 0, 0.03, 0));
+  const C = 0.01, X0 = -0.45, Z0 = -2.05, NX = 90, NZ = 80, hb = new Float32Array(NX * NZ).fill(9), v = new THREE.Vector3();
+  root.updateWorldMatrix(true, true);   // parents too: the sleeper's own pose places it
+  root.traverse((o) => {
+    if (!o.isMesh || !o.visible) return;
+    const p = o.geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); if (v.y > 0.85) continue;
+      const ix = Math.floor((v.x - X0) / C), iz = Math.floor((v.z - Z0) / C);
+      if (ix >= 0 && iz >= 0 && ix < NX && iz < NZ && v.y < hb[iz * NX + ix]) hb[iz * NX + ix] = v.y;
+    }
+  });
+  const T = []; for (let iz = 0; iz < NZ; iz++) for (let ix = 0; ix < NX; ix++) { const y = hb[iz * NX + ix]; if (y < 9) T.push(X0 + (ix + 0.5) * C, Z0 + (iz + 0.5) * C, y - 0.004); }
+  const p = hi.attributes.position, K = 4, R = 0.012;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i); if (y < 0.6) continue;
+    let c = 9; for (let t = 0; t < T.length; t += 3) { const dx = x - T[t], dz = z - T[t + 1], q = T[t + 2] + K * (dx * dx + dz * dz); if (q < c) c = q; }
+    const h = Math.max(R - Math.abs(y - c), 0) / R, m = Math.min(y, c) - h * h * R / 4;
+    p.setY(i, Math.max(0.585, m));
+  }
+  smoothSeams(hi);
+  return merge([[hi], [sculpt(20, 12, pillowPt), M(-0.54, 0.618, -1.71, 0, -0.04, 0, 0.78)]]);
+}
+// the sleeper's neck and head on the pillow: the neck bends forward on its pivot (neck, rad), rising out of the collar onto
+// the pillow; the head tips back on top of the neck (head[0], about a point 10 cm up the neck, inside the skull's base) and
+// turns toward the room (head[1]), so the face looks up with the chin a little down. Values measured so the head rests on
+// the pillow with nothing inside it (shots/b163/sleeper/sweep.js)
+const SLEEP_NECK = { neck: 0.7, head: [-0.3, 0.3] }, NECK_TOP = new THREE.Vector3(0, 0.1, 0);
+export function sleepPose(neck, head, p) {
+  neck.rotation.set(p.neck, 0, 0);
+  head.rotation.set(p.head[0], p.head[1], 0, 'YXZ');
+  head.position.set(0, 0.15, 0).sub(NECK_TOP).applyEuler(head.rotation).add(NECK_TOP);
+}
 // ---------- the bedroom at night: wallpaper, baked occlusion, moonlight through the window, the view outside ----------
 // furniture volumes [x0, x1, y0, y1, z0, z1]: they bake contact shadows into the floor and walls and block the doorway's light
 const FURN = [
@@ -3707,15 +3778,19 @@ export function buildBedroom(opt = {}) {
   const sheetM = Mt('sheet2', () => cloth(0xc8ccd8, { side: THREE.DoubleSide, size: [2.0, 1.2], pitch: 0.0004, sheen: 0.5 }));
   const blanket = mesh(P.blanket, blanketM, 0, 0.57, -0.55); g.add(blanket);
   const band = new THREE.Mesh(P.band, sheetM); blanket.add(band);
-  const pillows = new THREE.Mesh(P.pillows, fabric(0xd8d8de)); g.add(pillows);
+  const pillows = new THREE.Mesh(undefined, fabric(0xd8d8de)); g.add(pillows);   // geometry: sleptPillows, below
   const sheet = new THREE.Mesh(P.sheet, sheetM); sheet.visible = false; g.add(sheet);
   // sleeping body (shown when you look back from the ceiling): head on the pillow, shoulders under the covers
   // the same body as the first-person one, lying in its layInBed pose (the covers are shaped round it), with a head on the pillow
   const body = new THREE.Group();
   const sleeper = makePlayerBody(); sleeper.userData.layInBed(); sleeper.userData.legs.children[1].visible = false; body.add(sleeper);
-  const sleeperHead = new THREE.Group(); body.add(sleeperHead);
-  sleeperHead.add(new THREE.Mesh(P.sleeperSkin, skinMat()), new THREE.Mesh(P.sleeperHair, hairMat(HAIR[0])), new THREE.Mesh(P.sleeperFace, irisMat()));
-  body.userData = { sleeper, head: sleeperHead };
+  // the player's own neck and head (playerHead, as seen standing in the control room), asleep: lids closed; the neck on the
+  // pyjama collar, bent on its pivot so the head lies on the pillow, chin a little down, face turned a little toward the room
+  const sleeperHead = playerHead({ shut: 1 }); sleeper.add(sleeperHead.wrap);
+  sleeper.userData.neckSkin.visible = false;   // the first-person throat and collarbone strips: the head's own neck replaces them
+  sleepPose(sleeperHead.neck, sleeperHead.head, SLEEP_NECK);
+  body.userData = { sleeper, head: sleeperHead.wrap };
+  pillows.geometry = G('pillowsSlept', () => sleptPillows(sleeperHead.wrap));
   body.visible = false; g.add(body);
   // the bed just vacated: covers thrown back into a heap toward the foot and the +x side, sheet showing, a pillow askew
   const messBed = () => { blanket.geometry = P.heap; band.visible = false; pillows.geometry = P.pillowsMess; sheet.visible = true; body.visible = false; };
@@ -3820,17 +3895,19 @@ export function buildBedroom(opt = {}) {
 // puffer jacket, jeans, boots or trainers, a knitted beanie. outfit = { top, topCol: [base, line1, line2], sleeves:
 // 'rolled', legs: 'jeans'|'trousers', legCol, shoes: 'boots'|'trainers', shoeCol, beanie: colour }.
 // a tartan flannel: one sett per tile. Warp and weft carry the same stripes, so each band is half-strength on its own
-// and full where it crosses itself (the darker squares); a twill hatch runs diagonally through all of it, and brushed fuzz
-const plaidTex = (a, b, c) => ctex(`tartan${a}${b}${c}`, 256, 256, (g, w, h) => {
+// and full where it crosses itself (the darker squares); a twill hatch runs diagonally through all of it, and brushed fuzz.
+// inside: the back of the same cloth (a turned-back cuff): the sett mirrored, the colours paler and softer, more nap
+const plaidTex = (a, b, c, inside = false) => ctex(`tartan${a}${b}${c}${inside ? 'in' : ''}`, 256, 256, (g, w, h) => {
   const hx = (n) => '#' + new THREE.Color(n).getHexString();
   seed(a % 997); g.fillStyle = hx(a); g.fillRect(0, 0, w, h);
   // the sett: a wide dark block, a narrow dark pair beside it, a fine bright accent line, a mid shade of the ground
-  const stripes = [[0, 70, b, 0.5], [86, 10, b, 0.45], [104, 10, b, 0.45], [150, 4, c, 0.55], [186, 30, '#000000', 0.16]];
+  const stripes = [[0, 70, b, 0.5], [86, 10, b, 0.45], [104, 10, b, 0.45], [150, 4, c, 0.55], [186, 30, '#000000', 0.16]].map(([x, wd, col, al]) => [inside ? w - x - wd : x, wd, col, inside ? al * 0.75 : al]);
   g.globalCompositeOperation = 'multiply';
   for (const [x, wd, col, al] of stripes) { g.globalAlpha = al; g.fillStyle = hx(col) || col; if (typeof col === 'string') g.fillStyle = col; g.fillRect(x, 0, wd, h); g.fillRect(0, x, w, wd); }
   g.globalCompositeOperation = 'source-over';
   // the accent line is lighter than the ground, so it goes on top (thin, half covered by the crossing weft)
-  g.globalAlpha = 0.35; g.fillStyle = hx(c); g.fillRect(150, 0, 4, h); g.globalAlpha = 0.22; g.fillRect(0, 150, w, 4);
+  { const ax = inside ? w - 154 : 150; g.globalAlpha = 0.35; g.fillStyle = hx(c); g.fillRect(ax, 0, 4, h); g.globalAlpha = 0.22; g.fillRect(0, ax, w, 4); }
+  if (inside) { g.globalAlpha = 1; g.fillStyle = 'rgba(236,224,210,.2)'; g.fillRect(0, 0, w, h); for (let i = 0; i < 5000; i++) { g.fillStyle = rand() < 0.65 ? 'rgba(255,248,240,.09)' : 'rgba(0,0,0,.05)'; g.fillRect(rr(0, w), rr(0, h), rr(1, 3), rr(1, 2)); } }
   // twill: fine diagonal ridges
   g.globalAlpha = 1; for (let k = -h; k < w; k += 3) { g.strokeStyle = (k / 3) % 2 ? 'rgba(0,0,0,.13)' : 'rgba(255,255,255,.05)'; g.lineWidth = 1; g.beginPath(); g.moveTo(k, h); g.lineTo(k + h, 0); g.stroke(); }
   for (let i = 0; i < 2600; i++) { g.fillStyle = rand() < 0.5 ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)'; g.fillRect(rr(0, w), rr(0, h), rr(1, 3), 1); }
@@ -3903,15 +3980,54 @@ function dressHuman(g, o) {
     const zip = G('pufferZip', () => { const p = []; for (let i = 0; i < 16; i++) { const yn = 0.81 + i * 0.043; torsoPt(PI / 2, yn, K, v, 0.03); p.push(ball(0, v.y, v.z, 0.0045, 0.005, 0.003, 5, 3)); } return merge(p); });
     add(u.chest, zip, Mt('zipMetal', () => std(0x9a9ea2, { metalness: 0.8, roughness: 0.35 })));
   }
-  // rolled sleeves: bare forearms with the sleeve turned back in a thick roll below the elbow
+  // rolled sleeves: a bare forearm; on the forearm bone, the sleeve carried on past the elbow (it starts inside the upper
+  // sleeve and gathers a little into the roll) and the roll itself: two turned-back folds a few cm below the elbow, ~4 cm
+  // wide, showing the back of the cloth, its inner face just under the skin so it closes round the arm in every pose.
+  // All of it is built round the bare forearm's own axis and cross-section (r along x, 1.08 r across), right arm first.
   if (o.sleeves === 'rolled') {
-    const W = K.wr, rf = K.rf;
+    const W = K.wr, rf = K.rf, WL = Math.hypot(...W) * 1.02 + 0.01;
     const arm = G(`bareFore${rf}`, () => softTube([[0, -0.01, 0], [W[0] * 0.5, W[1] * 0.5, W[2] * 0.5], [W[0] * 1.02, W[1] * 1.02, W[2] * 1.02]], (t) => { const r = (0.034 - 0.008 * smooth(0, 1, t)) * rf; return [r, r * 1.08]; }, 12, 10, 0.08, 0.06));
-    const roll = G(`roll${rf}`, () => new THREE.TorusGeometry(0.043 * rf, 0.012 * rf, 6, 16));
-    const wd = new THREE.Vector3(...W).normalize();
+    const skinR = (s) => (0.034 - 0.008 * smooth(0, 1, (s + 0.01) / WL)) * rf;   // the bare forearm's radius s m down from the elbow
+    const T = new THREE.Vector3(...W).normalize(), N1 = new THREE.Vector3(1, 0, 0).addScaledVector(T, -T.x).normalize(), N2 = new THREE.Vector3().crossVectors(T, N1);
+    const at = (s, a, r1, r2, out) => out.copy(T).multiplyScalar(s).addScaledVector(N1, Math.cos(a) * r1).addScaledVector(N2, Math.sin(a) * r2);
+    const sA = 0.036 * rf, sB = 0.077 * rf, sC = (sA + sB) / 2, hw = (sB - sA) / 2;   // the roll: top edge, bottom edge
+    // the sleeve below the elbow: from just above the joint into the roll, a few mm wider than the end of the upper sleeve
+    // all round (its rounded top meets the upper sleeve almost square on, so the two cross in one clean line, not in
+    // teeth), gathered in soft rings with a few slanting creases; closed and rounded at both ends
+    const cuffSl = G(`rollSleeve${rf}`, () => {
+      const s0 = -0.014 * rf, s1 = sA + 0.01 * rf, geo = softTube([[T.x * s0, T.y * s0, T.z * s0], [T.x * sA * 0.4, T.y * sA * 0.4, T.z * sA * 0.4], [T.x * s1, T.y * s1, T.z * s1]], (t, a) => {
+        const s = s0 + (s1 - s0) * t, g = smooth(0, sA, s);
+        const r = (0.0485 + 0.0006 * g) * rf + (0.001 * Math.sin(s / (0.016 * rf) * TAU + 1.3 * Math.sin(2 * a)) + 0.0009 * Math.sin(3 * a + 0.6 + s * 90)) * g * rf;
+        const k = 1 - 0.2 * smooth(sA - 0.002 * rf, s1, s);   // tucked in under the roll's top lip, never through its face
+        return [r * k, r * k * 1.05];
+      }, 24, 22, 0.12, 0.08);
+      const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 0.9 + uv.getY(i) * (s1 - s0) / 0.35);   // the upper sleeve's plaid scale, carried on
+      return geo;
+    });
+    // the roll: a closed profile swept round the arm. Inner face just inside the skin; outer face two folds with a crease
+    // between (the lower one fuller), rounded lips at both edges, a little thicker on one side and set a little aslant
+    const roll = G(`roll2${rf}`, () => {
+      const v = new THREE.Vector3(), D = 0.016 * rf, prof = [];
+      const geo = grid(28, 30, (uu, w, out) => {
+        const a = uu * TAU, b = w * TAU, cx = Math.cos(b), cy = Math.sin(b);
+        const px = Math.sign(cx) * Math.abs(cx) ** 0.55, py = Math.sign(cy) * Math.abs(cy) ** 0.7;
+        const s = sC + hw * px + 0.003 * rf * Math.cos(a + 0.5), q = (s - sA) / (sB - sA), up = Math.max(0, py);
+        const th = D * (1 + 0.14 * Math.sin(2 * a + 0.7) + 0.07 * Math.sin(5 * a + 1.9)) * (0.92 + 0.12 * smooth(0.3, 0.8, q));
+        const crease = 0.0045 * rf * up * Math.exp(-(((q - 0.42) / 0.07) ** 2));
+        const off = -0.002 * rf + (th + 0.002 * rf) * 0.5 * (1 + py) - crease;
+        const r = skinR(s); return at(s, a, r + off, r * 1.08 + off, out);
+      });
+      // plaid along the folds: v by the length of cloth round the profile (same scale as the sleeves), u round the arm
+      const p = geo.attributes.position, uv = geo.attributes.uv, n = 28 + 1; let acc = 0;
+      for (let j = 0; j <= 30; j++) { if (j) acc += v.fromBufferAttribute(p, j * n).distanceTo(new THREE.Vector3().fromBufferAttribute(p, (j - 1) * n)); prof.push(acc); }
+      for (let i = 0; i < uv.count; i++) uv.setY(i, prof[Math.floor(i / n)] / 0.35);
+      return faceOut(geo, [T.x * sC, T.y * sC, T.z * sC]);
+    });
+    const inMat = o.top === 'flannel' ? Mt(`flannelIn${top.join('_')}`, () => std(0xffffff, { roughness: 0.96, map: plaidTex(...top, true), bumpMap: foldBump(), bumpScale: 3 })) : torsoM.material;
     fores.forEach((f, i) => {
       const s = i ? 1 : -1; f.geometry = s > 0 ? arm : G(`bareForeL${rf}`, () => mirrorX(arm)); f.material = skinMatT(u.tone);
-      const r = add(f.parent, roll, torsoM.material, s * W[0] * 0.2, W[1] * 0.2, W[2] * 0.2); r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(s * wd.x, wd.y, wd.z));
+      add(f.parent, s > 0 ? cuffSl : G(`rollSleeveL${rf}`, () => mirrorX(cuffSl)), torsoM.material);
+      add(f.parent, s > 0 ? roll : G(`roll2L${rf}`, () => mirrorX(roll)), inMat);
     });
   }
   // ---- the legs
