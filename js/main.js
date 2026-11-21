@@ -20,7 +20,12 @@ const has = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.c
 for (const k of Object.keys(ROOMS)) { const f = ROOMS[k]; ROOMS[k] = async (...a) => { E.room = k; try { return await f(...a); } finally { E.room = null; } }; }
 const ENDINGS = ['missing', 'communion', 'wardens', 'phone', 'sceptic']; // the keys of ENDS in scenes/beyond.js
 let devRoom = new URLSearchParams(location.search).get('room');
-const scenes = { bedroom, exam, hub, mandala, room: async () => {
+// the control-room act and the reveal: each file is loaded when its scene is first reached
+const control = async () => (await import('./scenes/control.js')).control();
+const field = async () => (await import('./scenes/field.js')).field();
+const aftermath = async () => (await import('./scenes/control.js')).aftermath();
+const reveal = async () => (await import('./scenes/reveal.js')).reveal();
+const scenes = { bedroom, exam, hub, control, field, aftermath, reveal, mandala, room: async () => {
   if (has(ROOMS, devRoom)) { G.visited[devRoom] = true; await ROOMS[devRoom](); }
   return 'hub';
 } };

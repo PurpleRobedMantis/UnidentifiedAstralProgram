@@ -2,7 +2,7 @@
 import { THREE, lookToward, E, G, $, on, wait, until, tween, lerp, say, hint, bar, fade, note, choose, prompt,
   setView, moveView, angleTo, aimAt, clearScene, discard, unsteady, t as tr } from '../engine.js';
 import { A } from '../audio.js';
-import { buildBedroom, makeGrey, makeMantis, idleMantis, makeHuman, idleHuman, makePlayerBody, aimGrey } from '../models.js';
+import { buildBedroom, makeGrey, makeMantis, idleMantis, makeHuman, idleHuman, makePlayerBody, aimGrey, humanGaze } from '../models.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const V2 = (x, y) => new THREE.Vector2(x, y);
@@ -48,9 +48,52 @@ const dcol = (hex) => new THREE.Color().setHex(hex, THREE.LinearSRGBColorSpace);
 // the child who looks at you in the classroom is the one who holds out the toy in the containers hall (build 146): same
 // size, clothes colour and eye colour (makeHuman picks those from the colour), and their own copper hair, cut short, which
 // no other child in the classroom has, so they stand out and are the same child in both rooms
-const KNOWN_KID = { scale: 0.55, color: 0x6a7b99, hair: { hair: 0xa4502a, hairStyle: 0 } };
+export const KNOWN_KID = { scale: 0.55, color: 0x6a7b99, hair: { hair: 0xa4502a, hairStyle: 0 } };
+// The known child's seat in the classroom circle (room centred on the dais at z -2.6, you enter at z 1.3): turned on the
+// stool a little over half way from the dais toward you, so they can look round at you over their shoulder (neck and
+// eyes) and back to the lesson without turning the whole body. Makes the person face +z, so rotation.y = atan2(dx, dz).
+export function seatKnownKid(kid) {
+  const p = kid.position, ad = Math.atan2(-p.x, -2.6 - p.z), ap = Math.atan2(-p.x, 1.3 - p.z);
+  let d = ap - ad; d = Math.atan2(Math.sin(d), Math.cos(d));
+  kid.rotation.set(0, ad + 0.55 * d, 0);
+}
+// A seated child's hands laid on the lap with the arms clear of the body. sitHuman reaches the wrists to the middle of the
+// thighs by swinging the arms in across the sides, and the upper arms and forearms then run about 1.5 cm inside the
+// torso. Here the same solve (shoulder x and z, elbow x, mirrored) is held to arms hanging at least zMin out from the
+// sides, and aims the wrists at the outer half of each thigh (out times the hip's width out from the middle), further
+// toward the knee (along), `lift` over the thigh's top; then the wrists are turned palm down with the fingers along the
+// thigh, as sitHuman does. idleHuman keeps these values (u.armX, u.armZ, u.foreX).
+export function clearLap(h, lift = 0.01, out = 1.5, along = 0.65, zMin = 0.06) {
+  const u = h.userData; if (!u.wristR || !u.seated) return h;
+  const p = h.parent; if (p) p.remove(h);
+  const pos0 = h.position.clone(), q0 = h.quaternion.clone(); h.position.set(0, 0, 0); h.quaternion.identity();
+  const pose = () => { u.armL.rotation.set(u.armX, 0, -u.armZ); u.armR.rotation.set(u.armX, 0, u.armZ); u.foreL.rotation.x = u.foreR.rotation.x = u.foreX; };
+  pose(); h.updateMatrixWorld(true);
+  const knee = u.kneeR.getWorldPosition(V(0, 0, 0)), hip = u.legR.getWorldPosition(V(0, 0, 0)), fwd = knee.clone().sub(hip); fwd.y = 0; fwd.normalize();
+  const target = hip.clone().lerp(knee, along); target.x *= out; target.y += (0.078 * (u.rf || 1) + 0.016 + lift) * h.scale.x; target.addScaledVector(fwd, -0.045 * h.scale.x);
+  u.armZ = Math.max(zMin, u.armZ);
+  const w = V(0, 0, 0), err = () => { pose(); h.updateMatrixWorld(true); u.wristR.getWorldPosition(w); return w.distanceToSquared(target); };
+  let e = err(), st = 0.2;
+  for (let it = 0; it < 160 && st > 0.002; it++) {
+    let better = false;
+    for (const k of ['armX', 'armZ', 'foreX']) for (const d of [st, -st]) {
+      const o = u[k]; u[k] = o + d; if (k === 'foreX') u[k] = Math.min(0, Math.max(-2.4, u[k])); if (k === 'armZ') u[k] = Math.max(zMin, u[k]);
+      const e2 = err(); if (e2 < e) { e = e2; better = true; } else u[k] = o;
+    }
+    if (!better) st *= 0.5;
+  }
+  pose(); h.updateMatrixWorld(true);
+  const down = V(0, -1, 0), m = new THREE.Matrix4(), qw = new THREE.Quaternion(), qp = new THREE.Quaternion();
+  for (const [wr, s] of [[u.wristR, 1], [u.wristL, -1]]) {
+    const f = fwd.clone(); f.x *= s;
+    const xa = down.clone().multiplyScalar(-s), ya = f.clone().negate(), za = V(0, 0, 0).crossVectors(xa, ya);
+    m.makeBasis(xa, ya, za); qw.setFromRotationMatrix(m); wr.parent.getWorldQuaternion(qp); wr.quaternion.copy(qp.invert().multiply(qw));
+  }
+  h.position.copy(pos0); h.quaternion.copy(q0); if (p) p.add(h);
+  return h;
+}
 const TIME = { value: 0 };
-const FOGU = { uFogC: { value: new THREE.Color(0) }, uFogN: { value: 1e6 }, uFogF: { value: 2e6 } };
+const FOGU ={ uFogC: { value: new THREE.Color(0) }, uFogN: { value: 1e6 }, uFogF: { value: 2e6 } };
 // call once per scene, after the scene's fog is set (on() callbacks are cleared with the scene)
 function shaderScene() {
   const f = E.scene.fog;
@@ -199,7 +242,7 @@ export async function hub() {
   for (;;) {
     clearScene();
     const sel = await crossroads();
-    if (sel === 'mandala' || sel.startsWith('end:')) return sel;
+    if (sel === 'control' || sel.startsWith('end:')) return sel;
     clearScene();
     await ROOMS[sel]();
     G.visited[sel] = true; lastDoor = sel;
@@ -524,6 +567,10 @@ async function crossroads() {
   mantis.rotation.y = Math.atan2(E.camera.position.x, E.camera.position.z) + Math.PI;
   let here = 0, turned = false;
   const amb = A.drone(74, { g: 0.05 }); const amb2 = A.drone(111.3, { g: 0.03 });
+  // on the visit that ends with "see more" (every way seen), the control room is built ahead while the view is still white
+  // (control.js prebuild, a piece a frame), so neither the question nor the change into it stalls
+  let crossPre = null;
+  if (count >= 4 && G.trust > -2) { crossPre = import('./control.js').then((m) => m.prebuild({ group: g, mantis })); await crossPre; }
   await fade(0, 1.4, '#fff');
   if (firstVisit) { firstVisit = false; note('crossroads'); say('A round metal room with ways leading off it. The tall one is here, and has been waiting.'); }
   else if (count >= 4) say('The tall one turns to face you.');
@@ -570,6 +617,8 @@ async function crossroads() {
     A.clicks(5);
     // no trust shown all night: they do not offer the vision
     let yes = false;
+    // (the control room, where a yes leads, was built ahead under the white as this visit began; a no leaves it unused)
+    let preP = crossPre;
     if (G.trust <= -2) await say('You are not ready.', 'them');
     else { await say('Would you like to see more?', 'them'); yes = (await choose(['Yes.', 'No. Take me home.'])) === 0; }
     if (!yes) {
@@ -586,6 +635,8 @@ async function crossroads() {
     // it opens one arm and reaches down; your own hand comes up to meet it
     const me = makePlayerBody(), mu = me.userData;
     mu.torso.children[0].visible = false; mu.legs.visible = false; mu.armL.visible = false; E.camera.add(me);
+    // (your arm's materials, compiled for the control room's lights too, once the build ahead is done)
+    preP = preP.then((pre) => import('./control.js').then((m) => m.prebuildMe(pre, me)));
     const p0 = E.camera.position.clone(), near = p0.clone().multiplyScalar(1.25 / Math.max(1.25, Math.hypot(p0.x, p0.z))); near.y = p0.y;
     const aim = aimAt(V(0, 1.25, 0));
     moveView(2.2, { pos: near, yaw: aim.yaw, pitch: aim.pitch });
@@ -608,10 +659,15 @@ async function crossroads() {
     }, (k) => k);
     A.clicks(3);
     await say('One hand settles on your shoulder. They lay one long finger in your open hand. It weighs nothing.');
-    A.tone(110, 3, { g: 0.08, to: 880, a: 1.5 });
-    amb.stop(2); amb2.stop(2);
-    await fade(1, 2, '#fff');
-    return result;
+    // the room begins to change around you: a deep hum and a tremor start here, and this room as it stands (the group, the
+    // tall one with their finger in your palm, your arm) is handed on to the control room, which takes its place around you
+    // (control.js); no fade
+    const hum = A.shiftHum ? A.shiftHum(0.45) : null;
+    amb.stop(2.5); amb2.stop(2.5);
+    await tween(1.2, (k) => { E.shake = 0.0035 * k; });
+    const pre = await preP;
+    E.carry = { objs: [g, me], group: g, mantis, me, hum, pre };
+    return 'control';
   }
   amb.stop(1); amb2.stop(1);
   await fade(1, 0.9, '#fff');
@@ -813,15 +869,37 @@ async function classroom() {
   const dummy = new THREE.Object3D(), kids = [];
   cols.forEach((c, i) => {
     const side = i % 2 ? 1 : -1, k = Math.floor(i / 2), s = 0.55 + (i % 3) * 0.08;
-    // seated on low stools in a circle round the dais, open on your side; the nearest (i = 0) faces you and later shows off
+    // seated on low stools in a circle round the dais, open on your side; the nearest (i = 0) sits half turned toward you
+    // and later shows off
     const th = side * (0.42 + k * 0.42), kid = makeHuman(i ? s : KNOWN_KID.scale, c, i ? { seated: true } : { seated: true, ...KNOWN_KID.hair });
+    clearLap(kid);
     kid.position.set(Math.sin(th) * 2.2, 0, -2.6 + Math.cos(th) * 2.2);
-    if (i === 0) kid.lookAt(0, 0, 1.3); else kid.lookAt(0, 0, -2.6);
+    if (i === 0) seatKnownKid(kid); else kid.lookAt(0, 0, -2.6);
     g.add(kid); kids.push(kid);
     dummy.position.copy(kid.position); dummy.scale.setScalar(s * 1.5); dummy.updateMatrix(); seats.setMatrixAt(i, dummy.matrix);
   });
   g.add(seats);
   on((dt, t) => { for (let i = 0; i < kids.length; i++) idleHuman(kids[i], t + i * 1.3); });
+  // The known child's eyes. mode 'you': held on you (the scripted beats). 'free': on the lesson (focusObj, or the space
+  // over the dais), looking round at you every 4-11 s for 1.6-3.2 s; if you meet their eyes they hold it for about half a
+  // second and look away. The eyes move first and the head follows them (humanGaze), aimed at the camera itself.
+  const kidLook = { mode: 'you', focusObj: null, at: false, t: 2.5, met: 0, glances: 0, looks: 0 };
+  {
+    const gz = humanGaze(kids[0]), focus = V(0, 1.35, -2.6), eye = V(0, 0, 0), cd = V(0, 0, 0), kh = kids[0].userData.head;
+    on((dt) => {
+      const k = kidLook;
+      if (k.mode === 'free') {
+        k.t -= dt;
+        if (k.at) {
+          kh.getWorldPosition(eye); E.camera.getWorldDirection(cd);
+          if (cd.angleTo(eye.sub(E.camera.position)) < 0.2) k.met += dt;   // you are looking at their face
+          if (k.met > 0.55 || k.t <= 0) { k.at = false; if (k.met > 0.55) k.looks++; k.met = 0; k.t = 4 + Math.random() * 7; }
+        } else if (k.t <= 0) { k.at = true; k.glances++; k.t = 1.6 + Math.random() * 1.6; }
+      }
+      const tgt = k.mode === 'you' || (k.mode === 'free' && k.at) ? E.camera.position : k.focusObj ? k.focusObj.getWorldPosition(focus) : focus.set(0, 1.35, -2.6);
+      gz.update(dt, tgt, 1);
+    });
+  }
   // low lucidity: look back and some of them have turned on their stools to look at you (not the nearest: they already do).
   // Turned about their own stool, which is round, so nothing moves into anything (checked: shots/b140/kids.js).
   kids.forEach((kid, i) => {
@@ -848,6 +926,9 @@ async function classroom() {
   await lookToward(V(kids[0].position.x, 0.7, kids[0].position.z), 1.4);
   await say('The child nearest you is looking right at you.');
   await say('You know this child. You cannot think where from.');
+  // and they look away, back to the lesson; from now on only glances
+  Object.assign(kidLook, { mode: 'free', at: false, t: 4.5 });
+  if (window.UAP) window.UAP.classroom = { kids, kidLook };
   await moveView(1.2, { yaw: 0, pitch: 0 });
   await say('We will play.', 'them');
 
@@ -894,6 +975,7 @@ async function classroom() {
   E.mode = 'locked';
   A.shimmer(659.3, 2.2, 0.02);
   { const lk = aimAt(V(0, TOYY, -2.6)); moveView(1.2, { yaw: 0, pitch: lk.pitch }); }
+  kidLook.focusObj = holder;
   await tween(1.4, (k) => holder.scale.setScalar(Math.max(0.001, TOYS * k)), (k) => 1 - Math.pow(1 - k, 3));
   E.captureLook = (dx, dy) => {
     idle = 0;
@@ -929,7 +1011,7 @@ async function classroom() {
   const OC = [0xffe08a, 0x5a86ff, 0xb070ff];
   const ou = { uColor: { value: dcol(OC[0]) }, uGlow: { value: 0.4 } };
   const orb = new THREE.Mesh(OG[0], sm(JEWEL, ou));
-  orb.position.set(0, 1.25, -2.6); g.add(orb);
+  orb.position.set(0, 1.25, -2.6); g.add(orb); kidLook.focusObj = orb;
   const ol = new THREE.PointLight(0xffe08a, 2, 5); orb.add(ol);
   const haloM = new THREE.SpriteMaterial({ map: glowTex(), color: OC[0], transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.55 });
   const halo = new THREE.Sprite(haloM); halo.scale.setScalar(0.9); orb.add(halo);
@@ -1002,6 +1084,7 @@ async function classroom() {
   await say('It comes to you.');
   {
     const kid = kids[0];
+    kidLook.mode = 'you';
     E.mode = 'locked'; await lookToward(V(kid.position.x, 0.7, kid.position.z), 1.2);
     A.inner();
     await say('The child speaks without moving their lips: “Watch. I can do it too.”');
@@ -1981,18 +2064,21 @@ async function containers() {
   // held in the cupped hands: the arms posed held out, the toy 5.5 cm out in front of the middle of the two hands (it was
   // a fixed point, made for a taller child)
   {
-    cu.armL.rotation.set(-1.05, 0, 0.19); cu.armR.rotation.set(-1.05, 0, -0.19); cu.foreL.rotation.x = cu.foreR.rotation.x = -0.48;
+    cu.armL.rotation.set(-1.05, 0, 0.09); cu.armR.rotation.set(-1.05, 0, -0.09); cu.foreL.rotation.x = cu.foreR.rotation.x = -0.48;
     child.updateMatrixWorld(true);
     const hc = (w) => { const m = w.children.find((c) => c.isMesh); m.geometry.computeBoundingBox(); return m.localToWorld(m.geometry.boundingBox.getCenter(V(0, 0, 0))); };
     toyHeld.copy(hc(cu.wristL)).add(hc(cu.wristR)).multiplyScalar(0.5).add(V(0, 0, 0.055));
     toy.position.copy(toyHeld);
   }
   let offer = 1, toyFollows = true;
+  const childGaze = humanGaze(child), CHILD_REST = { y: 0, p: 0.1 };
+  if (window.UAP) window.UAP.containers = { child, childGaze };
   on((dt, t) => {
     const b = Math.sin(t * 1.1) * 0.02;
-    cu.armL.rotation.set(-1.05 * offer + b, 0, 0.16 * offer + 0.03); cu.armR.rotation.set(-1.05 * offer + b, 0, -0.16 * offer - 0.03);
+    cu.armL.rotation.set(-1.05 * offer + b, 0, 0.17 * offer - 0.08); cu.armR.rotation.set(-1.05 * offer + b, 0, -0.17 * offer + 0.08);   // (a positive z on the left arm swings it in: held out, the arms just in from straight ahead; let down, a little out from the sides, clear of the body)
     cu.foreL.rotation.x = cu.foreR.rotation.x = -0.08 - 0.4 * offer;
-    cu.neck.rotation.x = 0.1 - 0.18 * offer; cu.chest.scale.z = 1 + Math.sin(t * 1.6) * 0.018;
+    // eyes on you the whole time, the head turned to you (humanGaze: aimed at the camera itself)
+    childGaze.update(dt, E.camera.position, 0.9, CHILD_REST); cu.chest.scale.z = 1 + Math.sin(t * 1.6) * 0.018;
     if (toyFollows) toy.position.set(toyHeld.x, lerp(0.4, toyHeld.y, offer) + b * 0.3, lerp(toyHeld.z - 0.2, toyHeld.z, offer));
     aimGrey(grey, E.camera.position, 0.8);
   });
@@ -2252,3 +2338,6 @@ async function viewing() {
 }
 
 export const ROOMS = { class: classroom, window: windowRoom, containers, viewing };
+// the shader kit and room shaders, for scenes in other files that show these rooms again (js/scenes/reveal.js)
+export const KIT = { sm, shaderScene, motes, shaft, glowTex, dcol, lathe, canvasTex, palmReach, PALM, TIME, FOGU, ADD, JEWEL, PEARL, SHAFT,
+  HALL_WALL, HALL_FLOOR, GLASS, FLUID, SEED, BOB, GROUND_HAZE, VZ, CL_WALL, CL_FLOOR, CL_CEIL, CL_INLAY };

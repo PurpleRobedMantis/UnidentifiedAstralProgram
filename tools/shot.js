@@ -50,7 +50,7 @@ const TIMEOUT = Number(process.env.UAP_TIMEOUT) || 420;
 let stretchAt = 'startup';
 // UAP_ROOT / UAP_PORT test another copy (e.g. the packaged beta folder) instead of the working copy
 const root = process.env.UAP_ROOT ? path.resolve(process.env.UAP_ROOT) : path.join(__dirname, '..');
-// UAP_SIZE=1920x1080 captures at another size (default 1280x720)
+// UAP_SIZE=1920x1080 captures at another size (default 1280x720); UAP_MOBILE=1 emulates a phone (touch only, mobile viewport)
 const [W, H] = (process.env.UAP_SIZE || '1280x720').split('x').map(Number);
 const PORT = Number(process.env.UAP_PORT) || 8767, DBG = Number(process.env.UAP_DBG) || 9333;   // UAP_DBG lets two captures run side by side
 const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find((p) => fs.existsSync(p));
@@ -89,9 +89,19 @@ async function up(url, tries = 40) { for (let i = 0; i < tries; i++) { try { ret
       if (d.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(d.params.type)) errs.push(d.params.type + ': ' + d.params.args.map((a) => a.value ?? a.description).join(' '));
       if (d.method === 'Log.entryAdded' && d.params.entry.level === 'error') errs.push('log: ' + d.params.entry.text + ' ' + (d.params.entry.url || '')); });
     await cmd('Page.enable'); await cmd('Runtime.enable'); await cmd('Log.enable');
-    await cmd('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
+    // UAP_MOBILE=1: a phone (mobile viewport, touch as the only pointer), so the game starts in its touch mode
+    const MOBILE = process.env.UAP_MOBILE === '1';
+    await cmd('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: MOBILE });
+    if (MOBILE) await cmd('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     await cmd('Page.navigate', { url: `http://127.0.0.1:${PORT}/?${query}` });
-    await sleep(2500);
+    // wait until the game is ready (BEGIN exists and, with dev=1, window.UAP), not a fixed time: under load (several
+    // captures side by side, tools/routes.js --jobs) a fixed 2.5 s was sometimes too short
+    for (let i = 0; i < 300; i++) {
+      const r = await cmd('Runtime.evaluate', { expression: `!!document.getElementById('startBtn') && (${!/(^|&)dev=1/.test(query)} || !!window.UAP)`, returnByValue: true });
+      if (r.result?.result?.value) break;
+      await sleep(100);
+    }
+    await sleep(300);
     const ev = async (expr) => { const r = await cmd('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.result.exceptionDetails) { const t = JSON.stringify(r.result.exceptionDetails); throw new Error(t.slice(0, 600) + (/is not defined/.test(t) ? ' HINT: each stretch between snaps is a separate function, so a const/let from an earlier stretch is gone. Share it on window (window.U = {...}).' : '')); } return r.result.result.value; };
     // without dev mode there is no window.UAP: the driver then gets only the page (E and G undefined)
     await ev(`(async()=>{ if(!window.UAP) return 0; const {E}=window.UAP; E.manual=true; E.wantLock=false; window.__ms=performance.now(); document.getElementById('startBtn').click();

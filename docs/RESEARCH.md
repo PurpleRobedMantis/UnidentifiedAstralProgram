@@ -269,6 +269,47 @@ A second pass read Reddit directly, aimed at the gaps above. Everything here is 
 
 ---
 
+## 14. Control room, field and reveal
+
+A third pass for the scenes after the four rooms: the mantis control room, a CE-5 group in a field, and a hybrid child. Reddit threads were read in full through Reddit's own pages; CSETI documents and books were read through online copies and summaries. As in section 13, most items are one person's account.
+
+### CE-5 practice
+
+- **The protocol.** Steven Greer's CSETI *Working Group Manual* sets out the "Contact Trilogy": group meditation with "Coherent Thought Sequencing" (picturing the route in, from the galaxy to the solar system, the Earth, the region and finally the people at the site), the "crop circle tones" played briefly on a speaker, and light signals. Groups form a circle, pair up, and post watchers to the four directions and overhead. A light is signalled only once judged not to be air traffic: a simple count such as three flashes and a pause, never SOS. Early CSETI used 0.5 to 1.5 million candlepower lamps; later groups use green lasers, drawing a triangle or circle to mark their position. A small red LED is recommended for night vision (**Recurring** as practice).
+- **The tones.** Greer calls them "a sort of trilling sound" recorded in crop circles in southern England. Colin Andrews, who recorded a similar sound at Cheesefoot Head in 1989, likened it first to a cricket close to the ear and then to electronic chirping, and put it at about 5 kHz. Sceptics identify the sound as a grasshopper warbler (**Contested**).
+- **Gulf Breeze, Florida, 14 March 1992.** 39 people; four or five lights; the lead light reportedly matched flash counts of three, two and five; after Greer traced a triangle in the sky, three lights formed an equilateral triangle. A Florida MUFON newsletter witness confirms the triangle and a light "pulsating in the same pattern" (**Single** event, two sources).
+- **Woodborough Hill, Wiltshire, 26 to 27 July 1992.** A CSETI group in crop formations saw strobe-like lights and a cartwheel of light inside the cloud, then a downpour. From two cars on a farm road, four people describe a low domed disc 80 to 150 feet across with rotating blue-green, red, amber and white lights, which answered two flashes twice and receded into mist. The trill was heard nearby (**Single**).
+- **Reddit sessions** (r/CE5, r/UFOs, r/HighStrangeness, r/Experiencers, 2021 to 2026): lawn chairs and campfires, Greer's app meditation, sessions of one to three hours (one public event ran from 8 pm to 4 am and saw nothing). Reported: silent white flashes, often caught at the edge of vision and repeating in the same patch of sky; orange lights, one splitting into two and then three; a "satellite" that stopped and sat like a star; three lights forming a triangle for 30 to 40 minutes; a light that vanished the moment a laser touched it; tingling at the temples and a sudden urge to leave (**Recurring**).
+- **Not found:** a CE-5 session that turned into an abduction. The contact community describes invited, peaceful contact.
+
+### Weather
+
+- **Rain on one patch.** Greer (*Hidden Truth, Forbidden Knowledge*, 2006) says the Woodborough Hill rain fell "only on this very small area", that Colin Andrews found it dry when he drove away, and that the craft went up into the mist. Greer reads it as privacy for the encounter (**Single**).
+- **Cloud from clear air.** Rio de Janeiro, November 2018: a disc vanished and a small cloud formed where it had been, then dissolved about 30 seconds later as the disc reappeared (**Single**). In the same thread: a long, dense, pointed band of mist above a treeline on a clear day, moving at a constant slow speed and lengthening while keeping its shape (**Single**). Craft hiding in or followed by a cloud recur across several posts (**Recurring**).
+- **Travis Walton, 1975.** In a domed room, a T-grip lever on the left arm of a chair: rotating it forward against "slow, fluid resistance" moved the stars on the walls downward in unison; released, it sprang upright and the stars stayed put. The right arm held a lime-green screen and about 25 coloured buttons in five rows (**Single**).
+- **Not found:** a being changing the weather from a console.
+
+### The control room
+
+- **Weaving.** An ayahuasca participant glimpsed a mantis queen "weaving reality" with many arms and multicoloured threads; another in the same thread saw arms "zipper together" time, colours and smells (r/Ayahuasca, 2020). A meditator was told some mantids weave the cosmos from frequency (r/Experiencers, 2025) and saw networks of luminous indigo filaments the beings travel along (r/MantisEncounters, 2024). An abductee was shown "several potential time lines" (r/AlienAbduction, 2020). A mantis at a wall of control panels said keeping everything in check "doesn't happen naturally" (r/MantisEncounters, 2025, DMT). Each is **Single**; the loom combines them.
+- **The basin.** A DMT account, first posted as a YouTube comment and reposted to Reddit: a mantis tapping at a "giant holographic birdbath" showing millions of lives, births, wars and someone brushing their teeth; ten minutes' silence; an owl-like head turn; "Most arrive here after the body dies. You came by a shortcut. This is frowned upon." (**Single**).
+- **Robes.** Purple, often with gold, is reported far more than any other colour (ten or more threads). Also reported: maroon and burgundy, red with a high collar, a very light silver-grey, grey, black, white, monk-like brown, dark blue, and a silvery mantis's hooded cloak shifting from red through blue to indigo (one dream, with a drawing). Four arms are reported twice. Jeanne Robinson drew a familiar grey in a large cloak with a curved collar and a female mantid who seemed in charge; a 1975 La Luz witness drew small greys in collared, towel-like brown garments (**Recurring** for purple; others **Single**). **Not found:** several mantids in clearly different colours together in one room.
+
+### The field
+
+- **Switched off.** Partners who cannot be woken until the light has gone; a wife standing transfixed before an orb who later denied it; a brother and sister who each remember shouting at the other, who seemed asleep; a park in which a friend, other people, birds and cars all froze for seconds while an object passed overhead, the friend then asking for the ball as if nothing had happened (**Recurring**).
+- **Another body.** Linda Porter (Covina, California, 1963, aged 17; published by Linda Moulton Howe, 1998) was walked by a tall mantis into a room of dense light and shown a dying man's light leave his solar plexus and enter a younger copy of him; she believed she herself had been moved into a healthier body (**Single**). One of John Mack's patients felt he was "viewing reality through their eyes" (*Abduction*, 1994). Ted Rice described waking in a new body after his "soul" was moved (Karla Turner, *Masquerade of Angels*, 1994). **Not found:** a person seeing out of a mantis's body.
+- **Two views.** One poster was aware of two selves at once, one paralysed in bed, the other floating beside the visitors and taken; on rejoining, an hour was missing (r/AlienAbduction, 2020, recalling 2017; **Single**).
+
+### The child
+
+- **The wig.** A lifetime-abductions post: a grey sensed as the group's matriarch, in an all-white room with round chairs, wore a black Egyptian bob likened to Cleopatra's. The poster found it ridiculous and was less afraid, and had asked the beings to cover themselves (r/Experiencers, 2023; **Single**). The painter David Huggins says his first lover, a pale being he calls Crescent, had "black hair which may or may not be a wig" (2011 interview; *Love & Saucers*, 2016).
+- **"It was mine."** A guide led a man out to his truck at night, returned with a baby while a few greys watched, said it was his, and apologised that it had to go (r/AlienAbduction, 2020). The wig poster dreamed days later of carrying a hybrid baby and saying it was theirs. Huggins says he fathered over sixty hybrid children. Hopkins and Jacobs describe "baby presentations" (**Recurring**).
+- **Not yet.** Under guided hypnosis, a mother was told she could go forward in time to meet her daughter: a girl of about twelve with long black hair, in a white space, doing "a little happy dance". Asked for a hug, the girl said it was not time yet (r/Experiencers, 2026; **Single**).
+- **Not found:** a second grey cueing the wigged one. That, and the game's joining of the wig, the child and the toy into one memory, are the game's own.
+
+---
+
 ## Main sources
 
 **Books and studies**
@@ -295,9 +336,16 @@ A second pass read Reddit directly, aimed at the gaps above. Everything here is 
 - The 1986 Controlled Remote Viewing manual and CIA reading-room Stargate files
 - Ingo Swann, *Penetration* (1998)
 - Jacques Vallée, *Passport to Magonia* (1969); John Keel, *Operation Trojan Horse* (1970)
+- Steven Greer, *Hidden Truth, Forbidden Knowledge* (2006); CSETI *Working Group Manual*
+- Travis Walton, *Fire in the Sky* (1996)
+- Linda Moulton Howe, *Glimpses of Other Realities, Vol. II* (1998)
+- Karla Turner, *Masquerade of Angels* (1994)
+- *Love & Saucers*, documentary on David Huggins (Brad Abrahams, 2016)
+- Colin Andrews's notes on the crop-circle sound recordings
 
 **Online accounts**
 - r/Experiencers, r/abductions, r/MantisEncounters, r/DMT, r/EscapingPrisonPlanet (first pass through a public Reddit archive; follow-up pass read directly, adding r/aliens, r/HighStrangeness, r/Sleepparalysis, r/AstralProjection and r/Psychonaut)
+- Third pass (section 14): r/CE5, r/AlienAbduction, r/Ayahuasca, r/InterdimensionalNHI and r/Glitch_in_the_Matrix, read directly
 - Lon Strickler's Phantoms & Monsters reader reports
 - Peter Meyer's collection of DMT reports
 - An anonymous DMT trip report (r/Experiencers and r/DMT, 2024) and one further anonymous Reddit post, which served as the project's starting material

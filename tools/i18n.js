@@ -12,11 +12,11 @@ const norm = (s) => s.replace(/\s+/g, ' ').trim();
 const ent = (s) => s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 
 // files the player sees text from (dev.js, fx.js, models.js, audio.js are developer-only or draw no text)
-const JS = ['js/scenes/night.js', 'js/scenes/ship.js', 'js/scenes/beyond.js', 'js/engine.js', 'js/main.js', 'js/touch.js', 'js/jester-lines.js'];   // notes and credits: read as data below
+const JS = ['js/scenes/night.js', 'js/scenes/ship.js', 'js/scenes/beyond.js', 'js/scenes/control.js', 'js/scenes/field.js', 'js/scenes/reveal.js', 'js/engine.js', 'js/main.js', 'js/touch.js', 'js/jester-lines.js'];   // notes and credits: read as data below
 // literals that look like text but never reach the screen
 const IGNORE = new Set(['II', 'Something broke', '. Reload the page to start again.', 'language table failed to load', 'untranslated:',
   'high-performance', 'no-store', 'YXZ', 'BUTTON', 'fps · resolution', 'draws ·', 'warm failed', 'layer on', 'unknown scene', 'DEV',
-  's axis in the hand', 's surface, in the right hand', 'ACT —']);
+  's axis in the hand', 's surface, in the right hand', 'ACT —', 'beads drawn']);
 const CODEY = /[{}=<>]|^[a-z-]+:\S|^#|^\.(?!\.\.)|^\w+:\/\/|\.(js|txt|html|png|jpg)$|^[a-z]+(-[a-z]+)+$|^[a-z]+[A-Z]\w*$|^(Key|Arrow|Digit)\w+$/;
 // engine.js lines that only the developer overlay shows
 const DEV_LINES = (src) => { const a = src.findIndex((l) => /function devText|const devText/.test(l)); return a < 0 ? [] : [a, a + 30]; };
@@ -26,6 +26,7 @@ const add = (s, where, dyn) => {   // dyn: its numbers change at run time, so th
   if (s == null) return;
   s = norm(String(s)).replace(/^(E|ACT) — /, '');
   if (!s || !/[a-z]/i.test(s) || IGNORE.has(s) || /^(v[\d.]+ [a-z]+ · )?build \d+$/.test(s)) return;   // the version label on the title screen
+  if (/\b(uniform|varying)\s+(float|vec\d|mat\d|sampler)|\bvec\d\(|\bnormalize\(|COMMON\.replace/.test(s)) return;   // GLSL source fragments
   if (dyn) s = s.replace(/\d+/g, '{n}');
   if (!out.has(s)) out.set(s, []);
   if (out.get(s).length < 3) out.get(s).push(where);

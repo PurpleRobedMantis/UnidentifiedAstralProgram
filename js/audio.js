@@ -2,6 +2,8 @@
 let ctx = null, master = null, noiseBuf = null, out = null;
 // developer-menu mute, remembered in this browser
 let muted = false; try { muted = localStorage.getItem('uap-mute') === '1'; } catch (_) {}
+// paused: the output is held silent while the context keeps running (see suspend)
+let held = false;
 const live = new Set(); // drones still sounding, so a scene change can never leave one running
 // where a gain ramp is right now, from what was scheduled (never from AudioParam.value, which lags the schedule)
 function track(a, b, t0, t1, exp) {
@@ -25,13 +27,23 @@ const crowded = () => {
   if (crowdAt.length >= CROWD) return true;
   crowdAt.push(now); return false;
 };
+// one incidental cue that starts several sources (a console tick, a loom pluck, a run of clicks): at most max of it in any
+// real second, whatever the speed. The crowd limit alone still let the control room start about 50 sources a real second
+// at 8x (12 multi-source cues), and the sound broke up as in the jester hall.
+const paceAt = {};
+const paced = (key, max) => {
+  const now = performance.now(), q = paceAt[key] || (paceAt[key] = []);
+  while (q.length && now - q[0] > 1000) q.shift();
+  if (q.length >= max) return true;
+  q.push(now); return false;
+};
 export const A = {
   speed: 1,
   get muted() { return muted; },
   // silence everything (or bring it back) at the very end of the chain
   setMute(m) {
     muted = !!m; try { localStorage.setItem('uap-mute', muted ? '1' : '0'); } catch (_) {}
-    if (out) out.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
+    if (out) out.gain.setTargetAtTime(muted || held ? 0 : 1, ctx.currentTime, 0.02);
     try { dispatchEvent(new Event('uap-mute')); } catch (_) {}   // every MUTE button relabels itself
   },
   init() {
@@ -388,10 +400,14 @@ export const A = {
     live.add(h);
     return h;
   },
-  suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); },
-  resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); },
+  // Pause holds the output silent instead of suspending the context. A suspended context stops its clock, but the
+  // scenes' wall-clock timers (loops that schedule ahead every few seconds) kept running, so a long pause queued minutes
+  // of future nodes on a frozen clock; after it the audio thread could not keep up (the clock ran at 0.4x: crackling, then
+  // dropouts) until that backlog had played out, into the next scene. With the clock running, timers and clock agree.
+  suspend() { held = true; if (ctx && out) { const n = ctx.currentTime; out.gain.cancelScheduledValues(n); out.gain.setTargetAtTime(0, n, 0.015); } },
+  resume() { held = false; if (ctx) { if (ctx.state === 'suspended') ctx.resume(); if (out) { const n = ctx.currentTime; out.gain.cancelScheduledValues(n); out.gain.setTargetAtTime(muted ? 0 : 1, n, 0.03); } } },
   click() { A.noise(0.03, { g: 0.25, f: 3200, q: 6 }); },
-  clicks(n = 4) { for (let i = 0; i < n; i++) setTimeout(A.click, i * 70 + Math.random() * 50); },
+  clicks(n = 4) { if (paced('clicks', 2)) return; for (let i = 0; i < n; i++) setTimeout(A.click, i * 70 + Math.random() * 50); },
   zap() { A.noise(0.9, { g: 0.6, f: 4000, q: 0.6, to: 200 }); A.tone(90, 0.9, { type: 'sawtooth', g: 0.35, to: 30 }); },
   // ethereal swell: a slow-blooming cluster of soft, slightly detuned sines (root, fifth, octave, a high partial) with a breath
   // of high air under it; nothing struck, nothing plucked. f = root, d = length in seconds
@@ -588,6 +604,21 @@ export const A = {
     A._air(t, d, 240, 420, 0.7, 0.25 * g, { atk: 0.4 });
     // the covers landing: a soft heavy flop
     if (flop) { A._thump(t + d, 75, 0.25, 0.07 * g); A._air(t + d, 0.4, 700, 280, 0.8, 0.06 * g, { atk: 0.08 }); }
+  },
+  // A small mantis on the stone sill outside the window, heard through the glass (the Communion morning): tiny dry sounds,
+  // close to nothing. kind 'hook': a foreleg's hook catching on the sill's edge; 'step': a foot set down; 'settle': the
+  // body's weight coming down onto its legs.
+  mantisSill(kind = 'hook', g = 1) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.01, j = 0.9 + Math.random() * 0.2, k = kind === 'hook' ? 1 : kind === 'step' ? 0.55 : 0.5;
+    // the claw: a dry tick of chitin on painted stone
+    A._air(t, 0.014, 4300 * j, 4300 * j, 2.2, 0.05 * g * k, { atk: 0.08 });
+    // the stone answering: a short, damped knock in the sill under the glass
+    A._body(t, [1240 * j, 2050 * j, 3320 * j], 0.05, 0.01 * g * k, { q: 30, strike: 0.002 });
+    // grit under the hook as it takes hold (it drags a millimetre)
+    if (kind === 'hook') A._air(t + 0.006, 0.045, 6800, 6800, 1.3, 0.012 * g, { atk: 0.3 });
+    // the weight: a soft low tap through the legs
+    if (kind === 'settle') A._thump(t, 210 * j, 0.06, 0.01 * g);
   },
   release() {
     if (!ctx) return;
@@ -801,6 +832,928 @@ export const A = {
   },
   chime(f = 660) { A.tone(f, 1.2, { g: 0.12 }); A.tone(f * 1.5, 1.4, { g: 0.07 }); },
   crinkle() { for (let i = 0; i < 14; i++) setTimeout(() => A.noise(0.05, { g: 0.2, f: 2500 + Math.random() * 4000, q: 4 }), i * 60 + Math.random() * 40); },
+  // ==== control room cues (js/scenes/control.js) ====
+  // The hall at work, until stopped: a low hum that breathes, the loom's threads singing thinly overhead, and small relays
+  // letting go at the consoles. Returns { set(level), stop(sec) }.
+  ctrlRoom(level = 1) {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.02, bus = ctx.createGain(), srcs = []; let alive = true;
+    bus.gain.setValueAtTime(0.0001, t); bus.gain.exponentialRampToValueAtTime(Math.max(level, 0.0001), t + sp(2.5)); bus.connect(master);
+    // the hall's own hum: low saws a hair apart behind a low-pass, slowly breathing
+    { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 180; lp.Q.value = 0.7; v.gain.value = 0.11;
+      const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.09; lg.gain.value = 0.03; lfo.connect(lg); lg.connect(v.gain); lfo.start(t); srcs.push(lfo);
+      for (const f of [46.2, 46.9, 69.4, 92.6]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(t); srcs.push(o); }
+      lp.connect(v); v.connect(bus); }
+    // the loom: threads singing, thin high bands that swell and fade against one another
+    { const v = ctx.createGain(); v.gain.value = 3.6; v.connect(bus);
+      [[1244, -0.5], [1397, 0.4], [1661, -0.2], [2093, 0.6]].forEach(([f, pan], i) => {
+        const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), g = ctx.createGain(); s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = f; b.Q.value = 240; g.gain.value = 0.55;
+        const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.07 + i * 0.045; lg.gain.value = 0.4; lfo.connect(lg); lg.connect(g.gain); lfo.start(t); srcs.push(lfo);
+        let o = g; if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; g.connect(p); o = p; }
+        s.connect(b); b.connect(g); o.connect(v); s.start(t, Math.random()); srcs.push(s); }); }
+    // the consoles: small relays letting go, never in time with one another
+    const relays = (from, span) => { for (let i = 0, n = Math.round(span * 2.4); i < n; i++) A._body(from + Math.random() * span, [1700 + Math.random() * 1500, 3600 + Math.random() * 1500], 0.06, 0.085, { q: 30, strike: 0.001, dest: bus }); };
+    relays(t + 0.3, 6);
+    const more = () => { if (!alive) return; relays(ctx.currentTime + 0.2, 6); timer = setTimeout(more, 6000); }; let timer = setTimeout(more, 6000);
+    const h = {
+      set(l, sec = 1) { const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(Math.max(l, 0.0001), n, sp(sec) / 3); },
+      stop(sec = 1) { if (!alive) return; alive = false; clearTimeout(timer); live.delete(h); const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4); for (const s of srcs) try { s.stop(n + sec + 0.2); } catch (_) {} setTimeout(() => { try { bus.disconnect(); } catch (_) {} }, (sec + 0.5) * 1000); },
+    };
+    live.add(h);
+    return h;
+  },
+  // What a bead's little world sounds like when it is brought close: 'home' (an engine ticking over, gravel), 'cold' (night
+  // air, and the trilling tones from the small speaker), 'rain' (rain on car roofs), 'gold' (fog: a held hush, and a far
+  // beating tone). Silent until set: returns { set(level 0..1), stop(sec) }.
+  beadWorld(kind = 'cold', level = 0) {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.02, bus = ctx.createGain(), srcs = []; let alive = true, last = -1;
+    bus.gain.value = Math.max(level, 0.0001); bus.connect(master);
+    const home = kind === 'home', cold = kind === 'cold', wet = kind === 'rain', gold = kind === 'gold';
+    // (helpers: a band of noise, a tone, a slow wobble on a level or pitch; each is started by the layer that uses it)
+    const band = (fr, q, g, pan = 0) => { const n = ctx.createBufferSource(), bq = ctx.createBiquadFilter(), v = ctx.createGain(); n.buffer = noiseBuf; n.loop = true; bq.type = 'bandpass'; bq.frequency.value = fr; bq.Q.value = q; v.gain.value = g;
+      let o = v; if (pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; v.connect(p); o = p; }
+      n.connect(bq); bq.connect(v); o.connect(bus); srcs.push(n); return { n, v }; };
+    const osc = (fr, type, g, dest) => { const o = ctx.createOscillator(), v = ctx.createGain(); o.type = type; o.frequency.value = fr; v.gain.value = g; o.connect(v); v.connect(dest); srcs.push(o); return o; };
+    const wob = (param, rate, depth) => { const l = ctx.createOscillator(), g = ctx.createGain(); l.frequency.value = rate; g.gain.value = depth; l.connect(g); g.connect(param); srcs.push(l); return l; };
+    const low = (cut, g) => { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = cut; v.gain.value = g; lp.connect(v); v.connect(bus); return { lp, v }; };
+    // home: the engine ticking over, a low lumpy idle
+    if (home) { const e = low(260, 0.1); osc(41, 'sawtooth', 1, e.lp).start(t); osc(61.7, 'square', 0.4, e.lp).start(t); wob(e.v.gain, 13.7, 0.035).start(t); wob(e.v.gain, 0.4, 0.02).start(t); }
+    // home: tyres turning on gravel, a dry crackling band
+    if (home) { const c = band(2300, 0.8, 0.1); c.n.start(t, Math.random()); wob(c.v.gain, 7.3, 0.06).start(t); wob(c.v.gain, 17.9, 0.03).start(t); }
+    // home: the cabin's dull thrum
+    if (home) band(120, 3, 0.8).n.start(t, Math.random());
+    // cold: night air over the field, low and wide
+    if (cold) { band(330, 0.5, 0.14, -0.4).n.start(t, Math.random()); band(410, 0.5, 0.14, 0.4).n.start(t, Math.random()); }
+    // cold: the small speaker's trilling tones, thin and boxy
+    if (cold) { const bp = ctx.createBiquadFilter(), v = ctx.createGain(); bp.type = 'bandpass'; bp.frequency.value = 5000; bp.Q.value = 4; v.gain.value = 0.045; bp.connect(v); v.connect(bus);
+      const o = osc(5050, 'triangle', 1, bp); o.start(t); wob(o.frequency, 31, 420).start(t); wob(o.frequency, 0.31, 160).start(t); wob(v.gain, 23, 0.03).start(t); wob(v.gain, 0.23, 0.012).start(t); }
+    // cold: hedge and grass stirring
+    if (cold) { const c = band(5200, 1.2, 0.03); c.n.start(t, Math.random()); wob(c.v.gain, 0.17, 0.018).start(t); }
+    // rain: on the car roofs, a hard bright patter
+    if (wet) { const c = band(3400, 0.7, 0.09); c.n.start(t, Math.random()); wob(c.v.gain, 9.1, 0.03).start(t); }
+    // rain: on the grass, softer and lower
+    if (wet) band(900, 0.6, 0.1).n.start(t, Math.random());
+    // rain: the roofs drumming under it
+    if (wet) { const c = band(210, 4, 0.45); c.n.start(t, Math.random()); wob(c.v.gain, 5.3, 0.15).start(t); }
+    // gold: the fog, a close hush
+    if (gold) band(260, 0.6, 0.3).n.start(t, Math.random());
+    // gold: something standing over the field, two low tones beating slowly
+    if (gold) { const e = low(420, 0.07); osc(98, 'triangle', 1, e.lp).start(t); osc(98.7, 'triangle', 1, e.lp).start(t); osc(147.2, 'sawtooth', 0.25, e.lp).start(t); }
+    // gold: very high, a thin ringing
+    if (gold) { band(5600, 60, 0.9, -0.3).n.start(t, Math.random()); band(5730, 60, 0.9, 0.3).n.start(t, Math.random()); }
+    // (the handle)
+    const h = {
+      set(l) { l = Math.max(0, Math.min(1, l)); if (Math.abs(l - last) < 0.015) return; last = l; bus.gain.setTargetAtTime(Math.max(l, 0.0001), ctx.currentTime, 0.12); },
+      stop(sec = 0.6) { if (!alive) return; alive = false; live.delete(h); const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4); for (const x of srcs) try { x.stop(n + sec + 0.2); } catch (_) {} setTimeout(() => { try { bus.disconnect(); } catch (_) {} }, (sec + 0.5) * 1000); },
+    };
+    live.add(h);
+    return h;
+  },
+  // One of the loom's threads let go by a hook (i 0..6 picks its note): a taut string sounding, its upper partials, and the
+  // dry tick of the hook leaving it.
+  loomPluck(i = 0) {
+    if (!ctx || paced('loomPluck', 2) || crowded()) return;
+    const t = ctx.currentTime + 0.02, f = [196, 220, 261.6, 293.7, 329.6, 392, 440][((i % 7) + 7) % 7];
+    // the string
+    A._body(t, [f, f * 2.003], 1.9, 0.12, { q: 420, strike: 0.003 });
+    // its upper partials
+    A._body(t, [f * 3.01, f * 4.03, f * 5.06], 0.9, 0.09, { q: 300, strike: 0.002 });
+    // the hook leaving it
+    A._body(t, [2900, 4700], 0.035, 0.1, { q: 18, strike: 0.001 });
+  },
+  // The chosen thread drawn tight: three short rubbed creaks as it takes the strain, the deep note of it coming taut, and
+  // a bright ring that blooms and stays as it turns to gold.
+  loomTie() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the strain: fibres creaking as they take it up
+    [[0, 311], [0.42, 370], [0.8, 440]].forEach(([d, f]) => A._body(t + d, [f, f * 2.41], 0.28, 0.11, { q: 70, swell: 0.16 }));
+    // taut: the low note of the whole thread
+    A._thump(t + 1.3, 74, 0.7, 0.1);
+    A._body(t + 1.3, [110, 220.4, 331], 3.6, 0.07, { q: 320, strike: 0.004 });
+    // gold: a ring that blooms out of it and holds
+    A._body(t + 1.45, [880, 1320.5, 1761, 2643], 4.2, 0.03, { q: 420, swell: 1.3 });
+    // light running along it
+    A._glints(t + 1.5, 2.4, 22, 2000, 7000, 0.016, 0.9, 0.02, 1.4);
+  },
+  // A thread fraying and its bead's world going out (i picks its note): fibres parting in a run of dry cracks, the
+  // thread's own note sagging out, a dull low stop.
+  loomFray(i = 0) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02, f = [196, 220, 261.6, 293.7, 329.6, 392, 440][((i % 7) + 7) % 7];
+    // fibres parting
+    for (let k = 0; k < 14; k++) A._body(t + Math.pow(k / 14, 1.6) * 1.3 + Math.random() * 0.03, [1500 + Math.random() * 2500, 5200 + Math.random() * 2000], 0.03, 0.045 * (1 - k / 20), { q: 14, strike: 0.001 });
+    // the thread's note, slack now and dull
+    A._body(t + 0.05, [f * 0.5, f * 0.752], 0.8, 0.13, { q: 60, strike: 0.006 });
+    // the window going dark
+    A._thump(t + 0.95, 58, 0.5, 0.09);
+  },
+  // A dark bead falling into the basin: a small wet knock and a soft bloom under it.
+  basinDrop() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the knock
+    A._body(t, [540, 1090, 1720], 0.28, 0.075, { q: 55, strike: 0.002 });
+    // the basin taking it
+    A._thump(t + 0.01, 96, 0.4, 0.07);
+    // light scattering where it went in
+    A._glints(t + 0.03, 0.5, 7, 1800, 5200, 0.014, 0.5, 0, 1.6);
+  },
+  // A pad on the weather table pressed home (i 0..3, each seated a little lower): the key's heavy seat, the body of the
+  // table answering, the latch.
+  padPress(i = 0) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02, k = 1 - i * 0.06;
+    // the key seating
+    A._thump(t, 66 * k, 0.32, 0.2);
+    // the table answering
+    A._body(t + 0.004, [148 * k, 221 * k, 347 * k], 1.1, 0.3, { q: 90, strike: 0.005 });
+    // the latch
+    A._body(t + 0.03, [1850, 3050], 0.045, 0.14, { q: 22, strike: 0.001 });
+  },
+  // The amber dome rolled under a palm: a heavy ball turning in its seat, detents ticking past, a hum from under it.
+  domeRoll(d = 2.8) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the ball turning in its seat
+    { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = 105; b.Q.value = 1.4;
+      v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.5, t + 0.35); v.gain.setValueAtTime(0.5, t + d - 0.5); v.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = 3.1; lg.gain.value = 0.18; l.connect(lg); lg.connect(v.gain); l.start(t); l.stop(t + d + 0.1);
+      s.connect(b); b.connect(v); v.connect(master); s.start(t, Math.random()); s.stop(t + d + 0.1); }
+    // detents ticking past
+    for (let i = 0; i < 15; i++) A._body(t + 0.2 + (i / 15) * (d - 0.5) + Math.random() * 0.04, [760, 1180, 2300], 0.05, 0.035, { q: 28, strike: 0.001 });
+    // a hum from under it
+    { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 300; v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.035, t + 0.5); v.gain.setValueAtTime(0.035, t + d - 0.4); v.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.3);
+      for (const f of [73.4, 110.4]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(t); o.stop(t + d + 0.4); }
+      lp.connect(v); v.connect(master); }
+  },
+  // The table at work after a pad (n 0..3: cloud, mist, rain, the fog closing): a hum coming up under it and holding, a
+  // held resonance, glass ticking as it works.
+  tableStir(n = 0) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02, f = [61.7, 55, 73.4, 49][((n % 4) + 4) % 4], d = 4.5;
+    // the hum under the table
+    { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 340; lp.Q.value = 0.8;
+      v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.06, t + 0.9); v.gain.setValueAtTime(0.06, t + d - 1.6); v.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      for (const [m, ty] of [[1, 'sawtooth'], [1.008, 'sawtooth'], [2.01, 'square']]) { const o = ctx.createOscillator(); o.type = ty; o.frequency.value = f * m; o.connect(lp); o.start(t); o.stop(t + d + 0.1); }
+      lp.connect(v); v.connect(master); }
+    // a held resonance in the table's rim
+    A._body(t + 0.3, [f * 4, f * 6.02, f * 9.05], 3.2, 0.035, { q: 200, swell: 1.4 });
+    // glass ticking as it works
+    A._glints(t + 0.5, 3.2, 9, 1400, 4200, 0.022, 0.35, 0, 1.2);
+  },
+  // The ring over the couch coming down: its hum, two tones a few cycles apart, and a thin hard edge. Returns
+  // { set(level 0..1), stop(sec) }; silent until set.
+  linkRing(level = 0) {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.02, bus = ctx.createGain(), srcs = []; let alive = true, last = -1;
+    bus.gain.value = Math.max(level, 0.0001); bus.connect(master);
+    // the hum: two tones beating
+    { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 520; v.gain.value = 0.11; lp.connect(v); v.connect(bus);
+      for (const [f, ty] of [[124, 'triangle'], [127.4, 'triangle'], [248.6, 'sawtooth']]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = ty; o.frequency.value = f; g.gain.value = ty === 'sawtooth' ? 0.3 : 1; o.connect(g); g.connect(lp); o.start(t); srcs.push(o); } }
+    // the ring's edge: a thin hard band either side of the head
+    for (const [f, pan] of [[3120, -0.7], [3190, 0.7]]) { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = f; b.Q.value = 90; v.gain.value = 1.4;
+      let o = v; if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; v.connect(p); o = p; }
+      s.connect(b); b.connect(v); o.connect(bus); s.start(t, Math.random()); srcs.push(s); }
+    const h = {
+      set(l) { l = Math.max(0, Math.min(1, l)); if (Math.abs(l - last) < 0.015) return; last = l; bus.gain.setTargetAtTime(Math.max(l * l, 0.0001), ctx.currentTime, 0.12); },
+      stop(sec = 0.6) { if (!alive) return; alive = false; live.delete(h); const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4); for (const s of srcs) try { s.stop(n + sec + 0.2); } catch (_) {} setTimeout(() => { try { bus.disconnect(); } catch (_) {} }, (sec + 0.5) * 1000); },
+    };
+    live.add(h);
+    return h;
+  },
+  // The ring closing round your head: a magnetic seat, pressure in the ears, and the ears ringing a hair apart.
+  linkLock() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the ring seating
+    A._thump(t, 84, 0.3, 0.3);
+    A._body(t, [176, 263, 412], 0.7, 0.05, { q: 80, strike: 0.004 });
+    // pressure
+    A._thump(t + 0.15, 37, 2.6, 0.24);
+    // the ears ringing
+    A._air(t + 0.2, 3.0, 5900, 5900, 45, 1.1, { atk: 0.25, pan: -0.2 });
+    A._air(t + 0.2, 3.0, 6040, 6040, 45, 1.1, { atk: 0.25, pan: 0.2 });
+  },
+  // One key pressed at a console somewhere in the hall (k 0..1: how near): a small dull tap and its click.
+  consoleTick(k = 1) {
+    if (!ctx || k <= 0 || paced('consoleTick', 2) || crowded()) return;
+    const t = ctx.currentTime + 0.02;
+    // the key bottoming
+    A._thump(t, 190, 0.05, 0.1 * k);
+    // its click
+    A._body(t, [1500 + Math.random() * 500, 2700 + Math.random() * 600], 0.03, 0.06 * k, { q: 20, strike: 0.001 });
+  },
+  // The lever on the weather table leaned over for d seconds against a slow, fluid resistance: a thick low groan from
+  // under the table, the shaft creaking in its boot now and then, a faint hum while it is held over.
+  leverPush(d = 4) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the resistance: a thick low groan, steady while it goes
+    { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = 150; b.Q.value = 5;
+      v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.9, t + 0.4); v.gain.setValueAtTime(0.9, t + d * 0.8); v.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = 5.2; lg.gain.value = 0.3; l.connect(lg); lg.connect(v.gain); l.start(t); l.stop(t + d + 0.1);
+      s.connect(b); b.connect(v); v.connect(master); s.start(t, Math.random()); s.stop(t + d + 0.1); }
+    // the shaft creaking in its boot
+    for (let i = 0; i < 5; i++) { const f = 240 + Math.random() * 90; A._body(t + 0.3 + (i / 5) * (d - 0.8) + Math.random() * 0.15, [f, f * 2.37], 0.22, 0.09, { q: 60, swell: 0.12 }); }
+    // a hum while it is held over
+    { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 260; v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.05, t + d * 0.5); v.gain.setValueAtTime(0.05, t + d * 0.85); v.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.2);
+      for (const f of [65.4, 98.3]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(t); o.stop(t + d + 0.3); }
+      lp.connect(v); v.connect(master); }
+  },
+  // The lever let go: it springs upright against its stop, and rattles there a moment.
+  leverBack() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the stop
+    A._thump(t + 0.06, 120, 0.16, 0.2);
+    // the shaft ringing
+    A._body(t + 0.06, [310, 742, 1190], 0.5, 0.12, { q: 110, strike: 0.003 });
+    // the grip rattling to rest
+    for (let i = 0; i < 4; i++) A._body(t + 0.16 + i * 0.075, [1400, 2300], 0.03, 0.09 * (1 - i * 0.2), { q: 20, strike: 0.001 });
+  },
+  // The crossroads turning into the control room around you: the ship's structure takes up a deep hum, the round room rings
+  // with it on its own two tones, the wall panels tremble against their frames and the floor throbs, until the hall is
+  // there. It carries over the change of scene: it is not in `live` (the scene change's stopAll would end it), so whoever
+  // starts it stops it, and it ends itself after 40 s if nobody does. Rises to `level` over 1.8 s; returns { set(level,
+  // sec), stop(sec) }.
+  shiftHum(level = 1) {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.02, bus = ctx.createGain(), srcs = []; let alive = true;
+    bus.gain.setValueAtTime(0.0001, t); bus.gain.exponentialRampToValueAtTime(Math.max(level, 0.0001), t + sp(1.8)); bus.connect(master);
+    // (helpers, each started by the layer that uses it: a slow or fast wobble on a level; a band of looping noise)
+    const wob = (param, rate, depth) => { const l = ctx.createOscillator(), g = ctx.createGain(); l.frequency.value = rate; g.gain.value = depth; l.connect(g); g.connect(param); srcs.push(l); return l; };
+    const noiseBand = (f, q, g, dest) => { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; v.gain.value = g; s.connect(b); b.connect(v); v.connect(dest); srcs.push(s); return { s, v }; };
+    // the structure: a deep hum in the hull, low saws a fifth apart and a hair out of tune, beating slowly, under a low-pass
+    { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 150; lp.Q.value = 0.9; v.gain.value = 0.2;
+      for (const f of [37, 37.35, 55.6]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.connect(lp); o.start(t); srcs.push(o); }
+      wob(v.gain, 0.55, 0.05).start(t); lp.connect(v); v.connect(bus); }
+    // the room answering on its own two tones (the crossroads' 74 and 111.3 Hz) and their octave: rings of filtered noise,
+    // narrow enough to sing, swelling against one another
+    { const v = ctx.createGain(); v.gain.value = 1; v.connect(bus);
+      [[74, 0.9, 0.31], [111.3, 0.75, 0.43], [148.4, 0.45, 0.23]].forEach(([f, g, r]) => { const b = noiseBand(f, 70, g * 9, v); b.s.start(t, Math.random() * 1.5); wob(b.v.gain, r, g * 4).start(t); });
+      for (const [f, g] of [[74, 0.025], [111.3, 0.018]]) { const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = f; og.gain.value = g; o.connect(og); og.connect(v); o.start(t); srcs.push(o); } }
+    // the wall panels trembling in their frames: mid bands of noise shaken at 19 and 23 Hz, a metal buzz
+    { const v = ctx.createGain(); v.gain.value = 1; v.connect(bus);
+      const a = noiseBand(430, 2.5, 0.5, v), b = noiseBand(930, 3.5, 0.32, v);
+      a.s.start(t, Math.random() * 1.5); b.s.start(t, Math.random() * 1.5); wob(a.v.gain, 19, 0.45).start(t); wob(b.v.gain, 23.3, 0.3).start(t); }
+    // the floor throbbing: a low tone that swells and sinks a little faster than once a second
+    { const o = ctx.createOscillator(), v = ctx.createGain(); o.frequency.value = 46; v.gain.value = 0.07; o.connect(v); v.connect(bus); o.start(t); srcs.push(o); wob(v.gain, 1.15, 0.065).start(t); }
+    const h = {
+      set(l, sec = 1) { if (!alive) return; const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(Math.max(l, 0.0001), n, sp(sec) / 3); },
+      stop(sec = 1) { if (!alive) return; alive = false; clearTimeout(timer); const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4); for (const s of srcs) try { s.stop(n + sec + 0.2); } catch (_) {} setTimeout(() => { try { bus.disconnect(); } catch (_) {} }, (sec + 0.5) * 1000); },
+    };
+    const timer = setTimeout(() => h.stop(2), 40000);
+    return h;
+  },
+  // ==== end control room cues ====
+  // ==== field cues (js/scenes/field.js) ====
+  // Field helpers. _fband: a band of noise that stays where it is (never glides), behind its own gain, which starts silent
+  // so a cue can shape it; returns { src, gain }. _floop: a handle for a looping cue, registered in live so stopAll ends it;
+  // run(from, to) schedules the cue's events in that stretch, and the loop keeps scheduling ahead while it lives.
+  _fband(f, q, g, pan, dest) {
+    const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), gg = ctx.createGain(), v = ctx.createGain();
+    s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q; gg.gain.value = g; v.gain.value = 0.0001;
+    let o = v; if (pan && ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; v.connect(p); o = p; }
+    s.connect(b); b.connect(gg); gg.connect(v); o.connect(dest || master); s.start(ctx.currentTime, Math.random() * 1.5);
+    return { src: s, gain: v.gain };
+  },
+  // The schedule is kept a fixed stretch ahead of the audio clock, never of the wall clock: while the context is suspended
+  // (the pause menu) its clock stands still, so nothing more is queued, and no backlog of future nodes builds up.
+  _floop(srcs, bus, run, set) {
+    const t = ctx.currentTime;
+    let next = t + 20, alive = true;
+    run(t + 0.05, next);
+    const timer = setInterval(() => { if (!alive) return; while (next < ctx.currentTime + 15) { run(next, next + 10); next += 10; } }, 2000);
+    const h = {
+      set,
+      // silence it at once (no fade); a later set() brings it back
+      cut() { if (!alive) return; const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setValueAtTime(0.0001, n); },
+      stop(sec = 1) {
+        if (!alive) return; alive = false; clearInterval(timer);
+        const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4);
+        for (const s of srcs) { try { s.stop(n + sec + 0.2); } catch (_) {} }
+        setTimeout(() => { try { bus.disconnect(); } catch (_) {} }, (sec + 0.5) * 1000);   // anything still queued on it is no longer pulled
+        live.delete(h);
+      },
+    };
+    live.add(h); return h;
+  },
+  // One bark from a dog across the valley: a voiced yelp through two mouth formants, dulled by distance, and its echo
+  // coming back off the hills twice.
+  _fbark(at, dest, g = 1) {
+    const o = ctx.createOscillator(), m1 = ctx.createBiquadFilter(), m2 = ctx.createBiquadFilter(), v = ctx.createGain(), lp = ctx.createBiquadFilter(), f0 = 300 + Math.random() * 80;
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f0 * 0.75, at); o.frequency.exponentialRampToValueAtTime(f0, at + 0.035); o.frequency.exponentialRampToValueAtTime(f0 * 0.62, at + 0.17);
+    m1.type = 'bandpass'; m1.frequency.value = 850; m1.Q.value = 3; m2.type = 'bandpass'; m2.frequency.value = 1700; m2.Q.value = 4; lp.type = 'lowpass'; lp.frequency.value = 1400;
+    v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.9 * g, at + 0.012); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.21);
+    o.connect(m1); o.connect(m2); m1.connect(v); m2.connect(v); v.connect(lp); lp.connect(dest);
+    const e1 = ctx.createDelay(2), l1 = ctx.createBiquadFilter(), g1 = ctx.createGain(), e2 = ctx.createDelay(3), g2 = ctx.createGain();
+    e1.delayTime.value = 0.62; l1.type = 'lowpass'; l1.frequency.value = 800; g1.gain.value = 0.3; e2.delayTime.value = 1.45; g2.gain.value = 0.12;
+    lp.connect(e1); e1.connect(l1); l1.connect(g1); g1.connect(dest); l1.connect(e2); e2.connect(g2); g2.connect(dest);
+    o.start(at); o.stop(at + 0.25);
+  },
+  // The night in an open field, a loop: wind over rough grass and through a bare hedge, the grass itself hissing with each
+  // gust, a dog far off with the hills answering, and a cooling exhaust ticking on one of the cars. Every band stays at its
+  // pitch; only its loudness moves. set(level, damp): damp 0..1 is the fog closing round you (the highs go first).
+  fieldNight() {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.05, R = Math.random, srcs = [], more = [], bus = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 14000; bus.gain.setValueAtTime(0.0001, t); bus.gain.exponentialRampToValueAtTime(1, t + 2.5); bus.connect(lp); lp.connect(master);
+    const gust = (gn, len, from, to, depth) => { for (let at = from; at < to;) { const d = len * (0.6 + R() * 0.9); gn.setTargetAtTime(Math.max(0.0001, 1 - depth + depth * (0.15 + R() * 1.1)), at, d * 0.35); at += d; } };
+    // wind: a broad low roar of moving air over the field, and a narrower band where it combs through the hedge
+    { const a = A._fband(300, 0.6, 0.35, -0.2, bus), b = A._fband(760, 1.3, 0.21, 0.3, bus); srcs.push(a.src, b.src);
+      more.push((from, to) => { gust(a.gain, 4.5, from, to, 0.75); gust(b.gain, 3.2, from, to, 0.85); }); }
+    // grass: the dry hiss of tussocks and dead stems, rising and falling with the wind
+    { const a = A._fband(5200, 0.9, 0.12, 0.5, bus), b = A._fband(3100, 1.6, 0.1, -0.5, bus); srcs.push(a.src, b.src);
+      more.push((from, to) => { gust(a.gain, 3.0, from, to, 0.9); gust(b.gain, 2.4, from, to, 0.9); }); }
+    // a dog far off across the valley, its bark coming back off the hills
+    { more.push((from, to) => { for (let at = from + 1.5 + R() * 3; at < to; at += 12 + R() * 16) { const n = 1 + Math.floor(R() * 3); for (let i = 0; i < n; i++) A._fbark(at + i * (0.42 + R() * 0.2), bus, 0.35 + R() * 0.15); } }); }
+    // the cars: a cooling exhaust ticking now and then, thin metal
+    { more.push((from, to) => { for (let at = from + R(); at < to; at += 0.9 + R() * 4) A._body(at, [3400 + R() * 900, 6100 + R() * 800], 0.05, 0.016, { q: 60, dest: bus }); }); }
+    // (scheduling)
+    return A._floop(srcs, bus, (from, to) => { for (const f of more) f(from, to); }, (level = 1, damp = 0) => {
+      const n = ctx.currentTime; bus.gain.setTargetAtTime(Math.max(0.0001, level), n, 0.6); lp.frequency.setTargetAtTime(14000 * Math.pow(0.08, damp), n, 0.8);
+    });
+  },
+  // The "crop circle tones" playing from a phone through a small round speaker on the camp table: a fast pulsing trill near
+  // 5 kHz that warbles, in phrases with short gaps, the second voice of the recording chirping slower and lower under it,
+  // the little cabinet knocking at each phrase, and the cheap amplifier's hiss. Small and tinny in a big open field.
+  // set(level, pan): how near the speaker is and where.
+  cropTones() {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.05, R = Math.random, srcs = [], more = [];
+    const spk = ctx.createGain(), sh = ctx.createWaveShaper(), hp = ctx.createBiquadFilter(), pk = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), bus = ctx.createGain();
+    { const n = 512, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(2.2 * x) / Math.tanh(2.2); } sh.curve = c; }
+    hp.type = 'highpass'; hp.frequency.value = 650; hp.Q.value = 0.9; pk.type = 'peaking'; pk.frequency.value = 2800; pk.Q.value = 2; pk.gain.value = 7; lp.type = 'lowpass'; lp.frequency.value = 7500;
+    bus.gain.value = 0.5; spk.connect(sh); sh.connect(hp); hp.connect(pk); pk.connect(lp); lp.connect(bus);
+    let out = bus; const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pan) { bus.connect(pan); out = pan; } out.connect(master);
+    const phrases = (from, to) => { const L = []; for (let at = from; at < to;) { const on = 1.1 + R() * 1.4; L.push([at, on, R() < 0.3]); at += on + 0.25 + R() * 0.6; } return L; };
+    // the trill: a tone near 5 kHz pulsed fifteen times a second and warbling, phrase after phrase (the main voice)
+    { const o = ctx.createOscillator(), w = ctx.createOscillator(), wg = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain(), gate = ctx.createGain(), env = ctx.createGain();
+      o.frequency.value = 5050; w.frequency.value = 9; wg.gain.value = 70; w.connect(wg); wg.connect(o.frequency);
+      lfo.type = 'square'; lfo.frequency.value = 15.5; lg.gain.value = 0.5; gate.gain.value = 0.5; lfo.connect(lg); lg.connect(gate.gain);
+      env.gain.value = 0.0001; o.connect(gate); gate.connect(env); env.connect(spk); o.start(t); w.start(t); lfo.start(t); srcs.push(o, w, lfo);
+      more.push((L) => { for (const [at, on, lo] of L) { env.gain.setTargetAtTime(0.5, at, 0.008); o.frequency.setTargetAtTime(lo ? 4350 : 5000 + R() * 160, at, 0.015); env.gain.setTargetAtTime(0.0001, at + on, 0.012); } }); }
+    // the second voice: a slower, lower chirp, like a cricket close by, answering in the gaps
+    { const o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), gate = ctx.createGain(), env = ctx.createGain();
+      o.frequency.value = 3650; lfo.type = 'square'; lfo.frequency.value = 7.7; lg.gain.value = 0.5; gate.gain.value = 0.5; lfo.connect(lg); lg.connect(gate.gain);
+      env.gain.value = 0.0001; o.connect(gate); gate.connect(env); env.connect(spk); o.start(t); lfo.start(t); srcs.push(o, lfo);
+      more.push((L) => { for (const [at, on] of L) { env.gain.setTargetAtTime(0.22, at + on * 0.45, 0.01); env.gain.setTargetAtTime(0.0001, at + on + 0.2, 0.02); } }); }
+    // the cabinet: the little plastic drum knocking as each phrase starts
+    { more.push((L) => { for (const [at] of L) A._body(at, [620, 1340, 2210], 0.07, 0.2, { q: 25, dest: spk }); }); }
+    // amplifier hiss: the cheap speaker's noise floor, close up
+    { const h = A._fband(6800, 0.8, 0.14, 0, spk); h.gain.setValueAtTime(1, t); srcs.push(h.src); }
+    // (scheduling)
+    return A._floop(srcs, bus, (from, to) => { const L = phrases(from, to); for (const f of more) f(L); }, (level = 1, p = 0) => {
+      const n = ctx.currentTime; bus.gain.setTargetAtTime(Math.max(0.0001, 0.5 * level), n, 0.25); if (pan) pan.pan.setTargetAtTime(p, n, 0.25);
+    });
+  },
+  // The mantis's own breathing, heard from inside its body: slow and deep through a long hollow chest (in through a higher
+  // band, out through a lower one; the bands stay put, the breath is in the loudness), a dry rasp catching on each out-breath,
+  // and now and then a double click of mouthparts in the hollow head. set(level).
+  mantisBreath() {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.05, R = Math.random, srcs = [], more = [], bus = ctx.createGain(); bus.gain.value = 1; bus.connect(master);
+    const cycles = (from, to) => { const L = []; for (let at = from + 0.3; at < to;) { const i = 2.1 + R() * 0.6, x = 2.8 + R() * 0.8; L.push([at, i, x]); at += i + x + 0.8 + R() * 1.2; } return L; };
+    // the in-breath: air drawn slowly into a long hollow body
+    { const a = A._fband(560, 1.2, 0.5, 0, bus), b = A._fband(1250, 2.5, 0.22, 0, bus); srcs.push(a.src, b.src);
+      more.push((L) => { for (const [at, i] of L) for (const gn of [a.gain, b.gain]) { gn.setTargetAtTime(1, at, i * 0.3); gn.setTargetAtTime(0.0001, at + i * 0.8, 0.1); } }); }
+    // the out-breath: lower, longer, heavier
+    { const a = A._fband(330, 1.0, 0.65, 0, bus), b = A._fband(760, 2.2, 0.25, 0, bus); srcs.push(a.src, b.src);
+      more.push((L) => { for (const [at, i, x] of L) for (const gn of [a.gain, b.gain]) { gn.setTargetAtTime(1, at + i + 0.05, 0.25); gn.setTargetAtTime(0.0001, at + i + x * 0.45, x * 0.22); } }); }
+    // the rasp: a dry catch high in the throat on each out-breath
+    { const a = A._fband(2300, 7, 0.4, 0, bus); srcs.push(a.src);
+      more.push((L) => { for (const [at, i, x] of L) { a.gain.setTargetAtTime(0.7, at + i + 0.3, 0.2); a.gain.setTargetAtTime(0.0001, at + i + x * 0.4, 0.3); } }); }
+    // clicks: mouthparts and plates in the hollow head, a dry double tick
+    { more.push((from, to) => { for (let at = from + 2 + R() * 3; at < to; at += 3 + R() * 6) { A._body(at, [1850, 2950, 4100], 0.07, 0.04, { q: 50, dest: bus }); A._body(at + 0.07 + R() * 0.03, [1700, 2800, 3900], 0.06, 0.03, { q: 50, dest: bus }); } }); }
+    // (scheduling)
+    return A._floop(srcs, bus, (from, to) => { const L = cycles(from, to); for (const f of more) f.length === 1 ? f(L) : f(from, to); }, (level = 1) => {
+      bus.gain.setTargetAtTime(Math.max(0.0001, level), ctx.currentTime, 0.4);
+    });
+  },
+  // One footfall of the tall one on wet grass: the weight of a long leg coming down into the turf, stems crushed under a
+  // narrow foot, the hard tip of the foot meeting the ground.
+  fieldStep(k = 1, side = 0) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.01, R = Math.random, p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain(); if (p.pan) p.pan.value = side * 0.2; p.connect(master);
+    // weight: a soft deep push into the turf
+    A._thump(t, 50 + R() * 8, 0.34, 0.2 * k);
+    // grass: stems crushed, a dense dry crackle
+    for (let i = 0; i < 14; i++) { const at = t + i * 0.014 + R() * 0.012, s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf;
+      b.type = 'bandpass'; b.frequency.value = 1800 + R() * 3500; b.Q.value = 2.2; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.9 * k * (1 - i / 18), at + 0.003); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.03);
+      s.connect(b); b.connect(v); v.connect(p); s.start(at, R() * 1.5); s.stop(at + 0.05); }
+    // the foot: a hard chitin tip meeting the ground
+    A._body(t + 0.004, [760, 1900], 0.05, 0.5 * k, { q: 30, dest: p });
+    setTimeout(() => { try { p.disconnect(); } catch (_) {} }, 1500);
+  },
+  // The felt pressure of the lights, a loop: two deep tones a few hertz apart beating slowly, felt in the chest more than
+  // heard; a still, low fullness in the ears; and a faint high ring that comes with it. set(level).
+  lightsPressure() {
+    if (!ctx) return { set() {}, stop() {} };
+    const t = ctx.currentTime + 0.05, srcs = [], bus = ctx.createGain(); bus.gain.value = 1; bus.connect(master);
+    // the beat: 32 and 34.3 Hz and a little of the octave, beating about twice a second
+    { const v = ctx.createGain(); v.gain.value = 0.1; v.connect(bus);
+      for (const [f, g] of [[32, 1], [34.3, 0.9], [64.6, 0.3]]) { const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = f; og.gain.value = g; o.connect(og); og.connect(v); o.start(t); srcs.push(o); } }
+    // fullness in the ears: a low band of noise that sits still
+    { const a = A._fband(95, 0.8, 0.9, 0, bus); a.gain.setValueAtTime(1, t); srcs.push(a.src); }
+    // the ring: very faint, high and narrow, in both ears
+    { const a = A._fband(7600, 40, 0.5, 0.3, bus), b = A._fband(7640, 40, 0.5, -0.3, bus); a.gain.setValueAtTime(1, t); b.gain.setValueAtTime(1, t); srcs.push(a.src, b.src); }
+    // (scheduling)
+    return A._floop(srcs, bus, () => {}, (level = 1) => { bus.gain.setTargetAtTime(Math.max(0.0001, level), ctx.currentTime, 0.5); });
+  },
+  // The three lights coming on where the laser drew, one after another 0.6 s apart: each a deep soft push of pressure and a
+  // low hull-like resonance swelling under it, as if something very large had arrived without a sound of its own.
+  lightsAnswer() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the push: one for each light
+    for (let i = 0; i < 3; i++) A._thump(t + i * 0.6, 40 - i * 2, 1.1, 0.26);
+    // the resonance: a vast low body answering each push
+    for (let i = 0; i < 3; i++) A._body(t + i * 0.6, [68 - i * 3, 104 - i * 4, 157 - i * 5], 2.4, 0.56, { q: 60, swell: 0.12 });
+  },
+  // The others stopping, everything at once (the scene cuts the tones and the night air dead on the same frame): a dull,
+  // deep close, like a heavy door shut somewhere far off; the ears suddenly full, as in a lift or a plane coming down;
+  // and the silence after it ringing.
+  switchOff() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the close
+    A._thump(t, 44, 0.9, 0.24); A._body(t, [92, 141, 203], 0.9, 0.012, { q: 30 });
+    // the ears: a low fullness that arrives in an instant, presses, and eases over a few seconds (it stays at its pitch)
+    { const a = A._fband(110, 0.9, 0.7, 0); a.gain.setValueAtTime(0.0001, t); a.gain.exponentialRampToValueAtTime(1, t + 0.03); a.gain.setValueAtTime(1, t + 1.4); a.gain.exponentialRampToValueAtTime(0.0001, t + 5); a.src.stop(t + 5.1); }
+    // the silence ringing: a narrow high band that does not move, fading in and slowly away
+    { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = 6200; b.Q.value = 35;
+      v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(1.0, t + 1.2); v.gain.exponentialRampToValueAtTime(0.0001, t + 5.5); s.connect(b); b.connect(v); v.connect(master); s.start(t, Math.random()); s.stop(t + 5.6); }
+  },
+  // Changing bodies: a deep push inward as one lets go and the other takes you; then the other body itself, close: his
+  // heartbeat (toMan) or two dry clicks in its hollow head; and the breath caught on arriving (his quick and shallow, its
+  // slow and hollow).
+  fieldSwitch(toMan = true) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the fold
+    A._thump(t, 50, 0.7, 0.28);
+    // the body
+    if (toMan) { A._thump(t + 0.3, 64, 0.16, 0.22); A._thump(t + 0.56, 58, 0.2, 0.16); }
+    else { A._body(t + 0.25, [1850, 2950, 4100], 0.07, 0.1, { q: 50 }); A._body(t + 0.33, [1700, 2800, 3900], 0.06, 0.08, { q: 50 }); }
+    // the breath
+    { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(), d = toMan ? 0.45 : 0.9; s.buffer = noiseBuf; s.loop = true;
+      b.type = 'bandpass'; b.frequency.value = toMan ? 1300 : 480; b.Q.value = 1.4;
+      v.gain.setValueAtTime(0.0001, t + 0.2); v.gain.exponentialRampToValueAtTime(toMan ? 0.54 : 0.67, t + 0.2 + d * 0.6); v.gain.exponentialRampToValueAtTime(0.0001, t + 0.2 + d);
+      s.connect(b); b.connect(v); v.connect(master); s.start(t + 0.2, Math.random()); s.stop(t + 0.25 + d); }
+  },
+  // The pickup: the column's hum (a deep note, its fifth and octave, a slow beat in it) building as the light comes up and
+  // holding; at lift seconds the ground letting go of his weight, a deep soft release; and the pressure in the ears growing
+  // as he goes up. Returns { stop(sec) } for the hum.
+  fieldPickup(lift = 5.4) {
+    if (!ctx) return { stop() {} };
+    const t = ctx.currentTime + 0.02, srcs = [], bus = ctx.createGain(); bus.gain.value = 1; bus.connect(master);
+    // the hum
+    { const v = ctx.createGain(); v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.09, t + 2.6); v.connect(bus);
+      for (const [f, g, ty] of [[55, 1, 'sine'], [82.7, 0.55, 'sine'], [110.4, 0.4, 'triangle'], [165.5, 0.12, 'triangle']]) { const o = ctx.createOscillator(), og = ctx.createGain(); o.type = ty; o.frequency.value = f; og.gain.value = g; o.connect(og); og.connect(v); o.start(t); srcs.push(o); } }
+    // the ground letting go
+    A._thump(t + lift, 38, 1.5, 0.3); A._body(t + lift, [138, 226, 309], 1.3, 0.02, { q: 25 });
+    // pressure in the ears, growing as he rises (its level climbs; it stays at its pitch)
+    { const a = A._fband(170, 1.0, 0.8, 0, bus); a.gain.setValueAtTime(0.0001, t + lift); a.gain.exponentialRampToValueAtTime(1, t + lift + 6); srcs.push(a.src); }
+    // (handle)
+    const h = { stop(sec = 1) { const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4); for (const s of srcs) { try { s.stop(n + sec + 0.2); } catch (_) {} } live.delete(h); } };
+    live.add(h); return h;
+  },
+  // The triangle opening overhead: a vast low resonance, as if a hull the size of the sky had been struck very softly,
+  // with a deep push under it.
+  fieldOpen() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the resonance
+    A._body(t, [46, 69, 93, 128, 171], 5.5, 0.75, { q: 90, swell: 0.7 });
+    // the push
+    A._thump(t, 33, 2.6, 0.32);
+  },
+  // The view folding through time (the 4D turn, about 5.6 s): a huge low body blooming as space bends, a fullness in the
+  // ears that holds while it is turned, the tall one's hollow body creaking under the strain, and a deep push as it
+  // settles back. Every band stays at its pitch; only the loudness moves.
+  fieldFold() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // the bloom: a vast resonance swelling up and dying slowly
+    A._body(t, [52, 78, 104, 157], 4.6, 0.38, { q: 70, swell: 1.4 });
+    // the ears: a still low fullness, up while the view is turned, then gone
+    { const a = A._fband(125, 1.1, 0.8, 0); a.gain.setValueAtTime(0.0001, t); a.gain.exponentialRampToValueAtTime(1, t + 1.6); a.gain.setValueAtTime(1, t + 3.2); a.gain.exponentialRampToValueAtTime(0.0001, t + 5.4); a.src.stop(t + 5.6); }
+    // the body: two dry creaks of chitin plates in the hollow chest, taking the strain
+    A._body(t + 0.9, [410, 930, 1650], 0.35, 0.12, { q: 40 }); A._body(t + 2.3, [380, 870, 1590], 0.4, 0.1, { q: 40 });
+    // the settling: a deep soft push as it all comes back
+    A._thump(t + 4.0, 40, 1.4, 0.13);
+  },
+  // The medallion lifting off the robe (about 1.4 s): its heavy chain links sliding and ticking against each other as it
+  // draws out, the disc's own low ring as it comes free, and the soft knock as the hook takes it.
+  fieldMedal(take = 1.4) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02, R = Math.random;
+    // the chain: small metal links ticking against each other, thicker as it pulls taut
+    for (let i = 0; i < 16; i++) { const at = t + Math.pow(i / 16, 0.8) * 1.1 + R() * 0.04; A._body(at, [2600 + R() * 700, 4300 + R() * 900, 6900 + R() * 800], 0.07, 0.05 + 0.04 * (i / 16), { q: 70 }); }
+    // the disc: a heavy gold plate ringing low as it swings free of the cloth
+    A._body(t + 0.25, [540, 1310, 2290], 1.6, 0.06, { q: 120, swell: 0.08 });
+    // the hook taking it: a dull knock of chitin on metal
+    A._body(t + take, [380, 870, 1720], 0.25, 0.25, { q: 35 }); A._thump(t + take, 90, 0.12, 0.08);
+  },
+  // ==== end field cues ====
+  // ==== reveal cues (js/scenes/reveal.js) ====
+  // the audio clock (seconds), for scenes that lay sounds out against the music
+  get clock() { return ctx ? ctx.currentTime : 0; },
+  // ---- the tune ----
+  // One melody, heard hummed (in the memories, and by the child) and as the reveal's music. 6/8, an eighth 0.27 s, a bar
+  // 1.62 s, eight bars: the first four are the hummed phrase (D, F, E, A; G, a flat E-flat, D, held), the last four its
+  // answer (D, F, E; B-flat, A; G, F, E; D). The E-flat is 308.6 Hz in every voice, a shade under true.
+  // _TUNE: [start in eighths, length in eighths, Hz]. _CHORDS: the held chord under each bar, led smoothly (D minor, F over
+  // C, the flat E-flat, D minor; D minor, B-flat over D, C, D minor). _BASS: the low note on each bar's downbeat.
+  _T8: 0.27,
+  _TUNE: [[0, 2, 293.66], [2, 1, 349.23], [3, 3, 329.63], [6, 5, 440], [12, 2, 392], [14, 1, 308.6], [15, 7, 293.66],
+    [24, 2, 293.66], [26, 1, 349.23], [27, 3, 329.63], [30, 3, 466.16], [33, 3, 440], [36, 2, 392], [38, 1, 349.23], [39, 3, 329.63], [42, 4, 293.66]],
+  _CHORDS: [[146.83, 174.61, 220], [130.81, 174.61, 220], [154.3, 196, 233.08], [146.83, 174.61, 220],
+    [146.83, 174.61, 220], [146.83, 174.61, 233.08], [130.81, 164.81, 196], [146.83, 174.61, 220]],
+  _BASS: [73.42, 65.41, 77.15, 73.42, 73.42, 58.27, 65.41, 73.42],
+  // The tune's notes from bar `from` for `bars` bars (wrapping round the eight), as [start, end, Hz] in audio time with
+  // bar `from` starting at t; each note ends a hair early (gap) so the voices can breathe between phrases.
+  _tuneEv(t, from, bars, gap = 0.03) {
+    const T8 = A._T8, out = [];
+    for (let k = 0; k < bars; k++) {
+      const b = (from + k) % 8;
+      for (const [e, l, f] of A._TUNE) if (e >= b * 6 && e < b * 6 + 6) { const a = t + (k * 6 + e - b * 6) * T8; out.push([a, a + l * T8 - gap, f, l]); }
+    }
+    return out;
+  },
+  // The glottal source shared by the hummed voices: a pulse whose harmonics fall away about 11 dB an octave, as a voice's
+  // do (a little more of the second and third, where a soft voice has its weight).
+  _glottal() {
+    if (!A._glot || A._glotCtx !== ctx) {
+      const N = 40, re = new Float32Array(N), im = new Float32Array(N);
+      for (let n = 1; n < N; n++) im[n] = Math.pow(n, -1.85) * (n === 2 ? 1.25 : n === 3 ? 1.1 : 1);
+      A._glot = ctx.createPeriodicWave(re, im); A._glotCtx = ctx;
+    }
+    return A._glot;
+  },
+  // looping noise from at to end through a low-pass at lp Hz (returns the filter, to connect onward)
+  _noiseLP(at, end, lp) {
+    const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(); s.buffer = noiseBuf; s.loop = true; f.type = 'lowpass'; f.frequency.value = lp;
+    s.connect(f); s.start(at, Math.random()); s.stop(end); return f;
+  },
+  // The tune hummed by a person. Voice: the glottal pulse slid from note to note, each note scooped up into (the first of
+  // a phrase from further below), its vibrato growing in after each onset, drifting a little flat over each phrase, with
+  // slow wavers, cycle-to-cycle jitter in pitch and shimmer in loudness (no voice holds a note dead still), and a breath
+  // of aspiration pulsing with each cycle. Through the throat and the nose: the nasal murmur's low resonance, a soft
+  // throat resonance above it, the closed mouth's anti-resonance hollowing the middle, two weak high nasal resonances
+  // (a hum's buzz), the shut lips damping everything above; on the long notes the lips part a crack (less damping, the
+  // anti-resonance moving up, more throat). Breath: air through the nose under the notes. Breath in: a real breath before
+  // each phrase, through the nose and down into the chest. Chest: the low of the voice, felt more than heard.
+  // voice 0: the grey in the remembered room: a darker, lower-sounding head, steady and clear. 1: the child: an octave up,
+  // a small light head, a quicker, less even vibrato. 2: the child under their breath: half voice, half air.
+  // o.at: when bar o.from (default 0) starts (audio clock), or o.in seconds from now (at least 0.65, for the breath);
+  // o.bars: how many bars (default 4: the hummed phrase), wrapping round the eight. o.pan. Returns the time to the end.
+  hum(voice = 0, level = 1, o = {}) {
+    if (!ctx) return 7;
+    const kid = voice > 0, airy = voice === 2, fm = kid ? 1.3 : 0.9, oct = kid ? 2 : 1;
+    const t = Math.max(ctx.currentTime + 0.65, o.at ?? ctx.currentTime + (o.in ?? 0));
+    const ev = A._tuneEv(t, o.from || 0, o.bars || 4, airy ? 0.09 : 0.04).filter((e) => e[0] >= t - 0.001);
+    if (!ev.length) return 0;
+    const t0 = ev[0][0], end = ev[ev.length - 1][1] + 0.45, verb = A._verb(0.3), pan = o.pan ?? 0;
+    const starts = ev.map(([a], i) => !i || a - ev[i - 1][1] > 0.2);   // a note that begins a phrase (after a breath)
+    const pitch = (p, mul) => {
+      p.setValueAtTime(ev[0][2] * mul * 0.9, t0 - 0.1);
+      ev.forEach(([a, b, f], i) => {
+        const prev = starts[i] ? f * (i ? 0.94 : 0.9) : ev[i - 1][2];
+        p.setValueAtTime(prev * mul, a); p.exponentialRampToValueAtTime(f * mul, a + (starts[i] ? 0.16 : 0.075)); p.setValueAtTime(f * mul, b);
+      });
+    };
+    const shape = (p, g) => {
+      p.value = 0; p.setValueAtTime(0.0001, t0 - 0.1);   // silent until then (sources may start earlier)
+      ev.forEach(([a, b], i) => {
+        const last = i === ev.length - 1 || starts[i + 1];
+        if (starts[i]) { p.setValueAtTime(0.0001, a); p.exponentialRampToValueAtTime(g, a + 0.1); } else p.linearRampToValueAtTime(g, a + 0.06);
+        if (last) { p.setValueAtTime(g, Math.max(a + 0.1, b - 0.25)); p.exponentialRampToValueAtTime(g * 0.5, b); p.exponentialRampToValueAtTime(0.0001, b + 0.2); }
+        else { p.setValueAtTime(g, b - 0.05); p.linearRampToValueAtTime(g * 0.8, b); }
+      });
+    };
+    // voice: the glottal pulse through throat and nose, wavering, with aspiration
+    { const os = ctx.createOscillator(); os.setPeriodicWave(A._glottal()); pitch(os.frequency, oct);
+      // vibrato, growing in over each note's first third of a second; slow wavers; drift flat over each phrase; jitter
+      const vib = ctx.createOscillator(), vg = ctx.createGain(); vib.frequency.value = kid ? 5.9 : 5.1; vib.connect(vg); vg.connect(os.frequency);
+      vg.gain.setValueAtTime(0, t0 - 0.1);
+      ev.forEach(([a, b, f, l]) => { const dep = f * oct * (kid ? 0.014 : 0.011) * (l > 2 ? 1 : 0.5); vg.gain.setValueAtTime(0, a); vg.gain.linearRampToValueAtTime(dep, Math.min(b, a + 0.32)); });
+      const wav = [[3.1, 0.0025], [4.7, 0.002], [0.43, 0.003]].map(([fr, d]) => { const w = ctx.createOscillator(), wg = ctx.createGain(); w.frequency.value = fr * (kid ? 1.17 : 1); wg.gain.value = 294 * oct * d * (kid ? 1.5 : 1); w.connect(wg); wg.connect(os.frequency); return w; });
+      os.detune.setValueAtTime(0, t0 - 0.1); ev.forEach(([a, b], i) => { if (starts[i]) os.detune.setValueAtTime(0, a); os.detune.linearRampToValueAtTime(-(kid ? 12 : 8) * ((i - ev.findLastIndex((_, j) => j <= i && starts[j])) + 1) / 7, b); });
+      const jit = ctx.createGain(); jit.gain.value = kid ? 420 : 300; A._noiseLP(t0 - 0.6, end, 30).connect(jit); jit.connect(os.detune);
+      const nas = ctx.createBiquadFilter(), thr = ctx.createBiquadFilter(), zero = ctx.createBiquadFilter(), ring = ctx.createBiquadFilter(), ring2 = ctx.createBiquadFilter(), lip = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), sh = ctx.createGain(), v = ctx.createGain();
+      nas.type = 'peaking'; nas.frequency.value = 265 * fm; nas.Q.value = 1.5; nas.gain.value = 7;
+      thr.type = 'peaking'; thr.frequency.value = 560 * fm; thr.Q.value = 2.5; thr.gain.value = 2;
+      zero.type = 'notch'; zero.frequency.value = 1150 * fm; zero.Q.value = 3;
+      ring.type = 'peaking'; ring.frequency.value = 2150 * fm; ring.Q.value = 3; ring.gain.value = 9;
+      ring2.type = 'peaking'; ring2.frequency.value = 2950 * fm; ring2.Q.value = 4; ring2.gain.value = 6;
+      lip.type = 'highshelf'; lip.frequency.value = 1500 * fm; const shut = airy ? -6 : -10;
+      lip.gain.setValueAtTime(shut, t0 - 0.1); thr.gain.setValueAtTime(2, t0 - 0.1); zero.frequency.setValueAtTime(1150 * fm, t0 - 0.1);
+      ev.forEach(([a, b, , l]) => { if (l >= 3) { const m = a + (b - a) * 0.55;
+        lip.gain.setValueAtTime(shut, a + 0.12); lip.gain.linearRampToValueAtTime(shut + 4, m); lip.gain.linearRampToValueAtTime(shut, b);
+        thr.gain.setValueAtTime(2, a + 0.12); thr.gain.linearRampToValueAtTime(5, m); thr.gain.linearRampToValueAtTime(2, b);
+        zero.frequency.setValueAtTime(1150 * fm, a + 0.12); zero.frequency.linearRampToValueAtTime(1350 * fm, m); zero.frequency.linearRampToValueAtTime(1150 * fm, b); } });
+      lp.type = 'lowpass'; lp.frequency.value = 4200; lp.Q.value = 0.5;
+      // loudness never quite still: slow wavers and fast shimmer
+      sh.gain.value = 1; for (const [fr, d] of [[7.3, 0.05], [11.9, 0.035]]) { const w = ctx.createOscillator(), wg = ctx.createGain(); w.frequency.value = fr; wg.gain.value = d; w.connect(wg); wg.connect(sh.gain); w.start(t0 - 0.1); w.stop(end); }
+      { const shm = ctx.createGain(); shm.gain.value = 3; A._noiseLP(t0 - 0.6, end, 40).connect(shm); shm.connect(sh.gain); }
+      // aspiration: air noise in the throat, pulsing with each glottal cycle
+      const asp = ctx.createGain(), ab = ctx.createBiquadFilter(), am = ctx.createOscillator(), ag = ctx.createGain();
+      ab.type = 'bandpass'; ab.frequency.value = 2600 * fm; ab.Q.value = 0.8; A._noiseLP(t0 - 0.6, end, 9000).connect(ab); ab.connect(asp); asp.gain.value = 0;
+      am.type = 'triangle'; pitch(am.frequency, oct); ag.gain.value = airy ? 0.5 : 0.22; am.connect(ag); ag.connect(asp.gain); asp.connect(nas);
+      shape(v.gain, (airy ? 0.1 : kid ? 0.22 : 0.2) * level);
+      os.connect(nas); nas.connect(thr); thr.connect(zero); zero.connect(ring); ring.connect(ring2); ring2.connect(lip); lip.connect(lp); lp.connect(sh); sh.connect(v); v.connect(A._out(pan, 0.85, verb, 0.35));
+      for (const x of [os, vib, am]) { x.start(t0 - 0.1); x.stop(end); } for (const w of wav) { w.start(t0 - 0.1); w.stop(end); }
+    }
+    // breath: air through the nose under every note
+    { const b = ctx.createBiquadFilter(), v = ctx.createGain();
+      b.type = 'bandpass'; b.frequency.value = 1350 * fm; b.Q.value = 0.6; A._noiseLP(t0 - 0.6, end, 3600).connect(b);
+      shape(v.gain, (airy ? 0.36 : kid ? 0.26 : 0.34) * level); b.connect(v); v.connect(A._out(pan, 0.9, verb, 0.2));
+    }
+    // breath in: before each phrase, a real breath, through the nose (high) and filling the chest (low), quickening to a stop
+    { const hi = ctx.createBiquadFilter(), lo = ctx.createBiquadFilter(), vh = ctx.createGain(), vl = ctx.createGain(), n = A._noiseLP(t0 - 0.6, end, 8000);
+      hi.type = 'bandpass'; hi.frequency.value = 1900 * fm; hi.Q.value = 1.1; lo.type = 'bandpass'; lo.frequency.value = 520 * fm; lo.Q.value = 0.8;
+      n.connect(hi); n.connect(lo); hi.connect(vh); lo.connect(vl);
+      for (const v of [vh, vl]) { v.gain.value = 0; v.gain.setValueAtTime(0.0001, t0 - 0.6); }
+      ev.forEach(([a], i) => { if (!starts[i]) return; const s = a - 0.48, g = (airy ? 0.42 : kid ? 0.26 : 0.5) * level;
+        for (const [v, k] of [[vh, 1], [vl, 0.6]]) { v.gain.setValueAtTime(0.0001, s); v.gain.exponentialRampToValueAtTime(g * k * 0.5, s + 0.18); v.gain.exponentialRampToValueAtTime(g * k, s + 0.36); v.gain.exponentialRampToValueAtTime(0.0001, s + 0.44); } });
+      const o2 = A._out(pan, 0.9, verb, 0.2); vh.connect(o2); vl.connect(o2);
+    }
+    // chest: the low of the voice, the same notes, felt in the chest more than heard
+    { const os = ctx.createOscillator(), lp = ctx.createBiquadFilter(), v = ctx.createGain();
+      os.type = 'triangle'; pitch(os.frequency, kid ? 1 : 1); lp.type = 'lowpass'; lp.frequency.value = kid ? 700 : 420; lp.Q.value = 0.5;
+      shape(v.gain, (airy ? 0.04 : kid ? 0.1 : 0.22) * level);
+      os.connect(lp); lp.connect(v); v.connect(A._out(pan, 1, verb, 0.15)); os.start(t0 - 0.1); os.stop(end);
+    }
+    return end - ctx.currentTime;
+  },
+  // The closed-mouth buzz the tune was first sung in (build 157, unchanged): a softened buzz slid from note to note (each
+  // phrase's first note scooped up from below) through the resonances of a mouth kept shut, with air leaking round every
+  // note, a breath in before each phrase, and the notes an octave down in the chest. voice 0: steady, a shade too even;
+  // voice 1: smaller-mouthed, breathier, less steady. With no o.ev it sings the seven notes in their first rhythm;
+  // o.ev: [start, end, Hz] notes to sing instead (audio time); o.dest: where it goes (default the master). Returns its length.
+  lull(voice = 0, level = 1, o = {}) {
+    if (!ctx) return 5.6;
+    const t = o.ev ? o.ev[0][0] - 0.38 : ctx.currentTime + 0.05, kid = voice === 1, fm = kid ? 1.24 : 1;
+    let ev = o.ev, end;
+    if (!ev) {
+      ev = []; let at = t + 0.38;
+      for (const [f, d] of [[293.66, 0.5], [349.23, 0.5], [329.63, 0.75], [440, 0.95], [0, 0.3], [392, 0.5], [308.6, 0.68], [293.66, 1.35]]) { if (f) ev.push([at, at + d, f]); at += d; }
+      end = at + 0.3;
+    } else end = ev[ev.length - 1][1] + 0.3;
+    const out = o.dest || master;
+    const breaths = ev.filter(([a], i) => !i || a - ev[i - 1][1] > 0.2).map(([a], i) => [i ? a - 0.3 : t + 0.02, i ? 0.24 : 0.32]);
+    const pitch = (p, mul) => {
+      p.setValueAtTime(ev[0][2] * mul * 0.94, t);
+      ev.forEach(([a, b, f], i) => { p.setValueAtTime((i ? ev[i - 1][2] : f * 0.94) * mul, a); p.exponentialRampToValueAtTime(f * mul, a + (i ? 0.085 : 0.16)); p.setValueAtTime(f * mul, b); });
+    };
+    const shape = (p, g) => {
+      p.setValueAtTime(0.0001, t);
+      ev.forEach(([a, b], i) => {
+        const first = !i || ev[i - 1][1] < a - 0.01, last = i === ev.length - 1;
+        if (first) { p.setValueAtTime(0.0001, a); p.exponentialRampToValueAtTime(g, a + 0.14); } else p.linearRampToValueAtTime(g, a + 0.09);
+        if (last) { p.setValueAtTime(g, a + (b - a) * 0.35); p.exponentialRampToValueAtTime(0.0001, b + 0.25); }
+        else if (ev[i + 1][0] > b + 0.01) { p.setValueAtTime(g, b - 0.1); p.exponentialRampToValueAtTime(0.0001, b + 0.08); }
+        else { p.setValueAtTime(g, b - 0.07); p.linearRampToValueAtTime(g * 0.66, b); }
+      });
+    };
+    // the voice: a softened buzz through a closed mouth's three resonances, wavering a little
+    { const os = ctx.createOscillator(), lp = ctx.createBiquadFilter(), v = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain(), dr = ctx.createOscillator(), dg = ctx.createGain();
+      os.type = 'sawtooth'; pitch(os.frequency, 1); lp.type = 'lowpass'; lp.frequency.value = kid ? 1700 : 1150; lp.Q.value = 0.3;
+      vib.frequency.value = kid ? 5.9 : 5.1; vg.gain.setValueAtTime(0, t); vg.gain.linearRampToValueAtTime(kid ? 3.4 : 1.5, t + 1.6); vib.connect(vg); vg.connect(os.frequency);
+      dr.frequency.value = kid ? 0.83 : 0.47; dg.gain.value = kid ? 2.6 : 0.5; dr.connect(dg); dg.connect(os.frequency);
+      os.connect(lp);
+      for (const [f, q, g] of [[290, 4, 1], [1080, 7, 0.2], [2500, 8, 0.07]]) { const b = ctx.createBiquadFilter(), bg = ctx.createGain(); b.type = 'bandpass'; b.frequency.value = f * fm; b.Q.value = q; bg.gain.value = g; lp.connect(b); b.connect(bg); bg.connect(v); }
+      shape(v.gain, 0.5 * level); v.connect(out);
+      os.start(t); vib.start(t); dr.start(t); os.stop(end); vib.stop(end); dr.stop(end);
+    }
+    // breath: air leaking round each note, a breath in before each phrase
+    { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(), b2 = ctx.createBiquadFilter(), v2 = ctx.createGain();
+      s.buffer = noiseBuf; s.loop = true; b.type = 'bandpass'; b.frequency.value = 2300 * fm; b.Q.value = 0.8; v.gain.value = 0; shape(v.gain, (kid ? 0.2 : 0.19) * level);
+      b2.type = 'bandpass'; b2.frequency.value = 1500 * fm; b2.Q.value = 1.3; v2.gain.value = 0; v2.gain.setValueAtTime(0.0001, t);
+      for (const [a, d] of breaths) { v2.gain.setValueAtTime(0.0001, a); v2.gain.exponentialRampToValueAtTime((kid ? 0.2 : 0.24) * level, a + d * 0.6); v2.gain.exponentialRampToValueAtTime(0.0001, a + d); }
+      s.connect(b); b.connect(v); v.connect(out); s.connect(b2); b2.connect(v2); v2.connect(out); s.start(t, Math.random()); s.stop(end);
+    }
+    // chest: the same notes an octave down, felt more than heard
+    { const os = ctx.createOscillator(), lp = ctx.createBiquadFilter(), v = ctx.createGain();
+      os.type = 'triangle'; pitch(os.frequency, 0.5); lp.type = 'lowpass'; lp.frequency.value = 280; shape(v.gain, (kid ? 0.075 : 0.11) * level);
+      os.connect(lp); lp.connect(v); v.connect(out); os.start(t); os.stop(end);
+    }
+    return end - ctx.currentTime;
+  },
+  // One stretch of the reveal's lullaby, bars o.from to o.to (default all eight), bar o.from starting at o.at. The lead is
+  // the closed-mouth buzz (lull) singing the tune; under it, gently: a soft held chord on each bar, a low note on each
+  // downbeat, and now and then one light plucked note. Each layer goes to o.dest[layer] (music() gives each its own
+  // level) or into a room of its own.
+  _lullaby(o = {}) {
+    if (!ctx) return 0;
+    const T8 = A._T8, BAR = 6 * T8, from = o.from ?? 0, to = o.to ?? 8, dest = o.dest || {};
+    const t0 = Math.max(o.at ?? 0, ctx.currentTime + 0.45), t1 = t0 + (to - from) * BAR;
+    let verb = null; const out = (k, dry, wet) => dest[k] || A._out(0, dry, verb || (verb = A._verb(0.45)), wet);
+    // lead: the closed-mouth buzz singing the tune
+    { const ev = A._tuneEv(t0, from, to - from, 0.03); if (ev.length) A.lull(0, 1, { ev, dest: out('lead', 0.8, 0.5) }); }
+    // chord: a soft held chord on each bar, two slightly detuned soft-edged voices a note, swelling in and handing over
+    for (let b = from; b < to; b++) {
+      const at = t0 + (b - from) * BAR, v = ctx.createGain(), lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 620; lp.Q.value = 0.4;
+      v.gain.value = 0; v.gain.setValueAtTime(0.0001, at - 0.3); v.gain.linearRampToValueAtTime(0.058, at + 0.35); v.gain.setValueAtTime(0.058, at + BAR - 0.3); v.gain.linearRampToValueAtTime(0.0001, at + BAR + 0.3);
+      for (const f of A._CHORDS[b % 8]) for (const [ty, det, g] of [['triangle', -4, 1], ['sawtooth', 5, 0.35]]) {
+        const os = ctx.createOscillator(), og = ctx.createGain(); os.type = ty; os.frequency.value = f; os.detune.value = det; og.gain.value = g;
+        os.connect(og); og.connect(lp); os.start(at - 0.3); os.stop(at + BAR + 0.35);
+      }
+      lp.connect(v); v.connect(out('chord', 0.6, 0.8));
+    }
+    // low: a low note on each bar's downbeat, a soft felt-struck string, the note and its octave, dying through the bar
+    for (let b = from; b < to; b++) {
+      const at = t0 + (b - from) * BAR, f = A._BASS[b % 8], os = ctx.createOscillator(), o2 = ctx.createOscillator(), og = ctx.createGain(), lp = ctx.createBiquadFilter(), v = ctx.createGain();
+      os.type = 'triangle'; os.frequency.value = f; o2.frequency.value = f * 2; og.gain.value = 0.3; lp.type = 'lowpass'; lp.frequency.value = 320; lp.Q.value = 0.7;
+      v.gain.value = 0; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.12, at + 0.06); v.gain.exponentialRampToValueAtTime(0.0001, at + BAR * 0.95);
+      os.connect(lp); o2.connect(og); og.connect(lp); lp.connect(v); v.connect(out('low', 0.85, 0.3));
+      for (const x of [os, o2]) { x.start(at); x.stop(at + BAR); }
+    }
+    // pluck: now and then one light plucked note high over the chord (bars 3 and 7, on the half bar): a small steel tooth,
+    // its overtone dying fast, through a little wooden box
+    for (const [b, f] of [[3, 880], [7, 587.33]]) {
+      if (b < from || b >= to) continue;
+      const at = t0 + ((b - from) * 6 + 3) * T8, bx = ctx.createBiquadFilter(); bx.type = 'peaking'; bx.frequency.value = 720; bx.Q.value = 1.2; bx.gain.value = 5;
+      bx.connect(out('pluck', 0.7, 0.7));
+      for (const [m, gm, d] of [[1, 1, 2.2], [1.0017, 0.45, 1.9], [6.27, 0.14, 0.25]]) {
+        const os = ctx.createOscillator(), v = ctx.createGain(); os.frequency.value = f * m;
+        v.gain.value = 0; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.06 * gm, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + d);
+        os.connect(v); v.connect(bx); os.start(at); os.stop(at + d + 0.05);
+      }
+    }
+    return t1 - ctx.currentTime;
+  },
+  // The reveal's lullaby for as long as the scene wants it: _lullaby laid out two bars at a time a little ahead, round and
+  // round the eight bars, each layer through its own level { lead, chord, low, pluck }. o.at / o.in: when bar o.bar (even,
+  // default 0) starts. Returns { set(levels, seconds), next(), barTime(bar), stop(seconds) }: next() is the next even bar
+  // not yet laid out and when it starts; barTime(b, after) when bar b next starts at or after audio time `after` (default
+  // 0.75 s from now).
+  music(o = {}) {
+    if (!ctx) return { set() {}, next() { return [0, 0]; }, barTime() { return 0; }, stop() {} };
+    const T8 = A._T8, BAR = 6 * T8, verb = A._verb(0.45), bus = ctx.createGain(), send = ctx.createGain(), L = {};
+    bus.gain.value = 0.6; bus.connect(master); send.gain.value = 0.55; bus.connect(send); send.connect(verb);
+    for (const k of ['lead', 'chord', 'low', 'pluck']) { L[k] = ctx.createGain(); L[k].gain.value = (o.levels && o.levels[k]) ?? 1; L[k].connect(bus); }
+    let at = Math.max(ctx.currentTime + 0.5, o.at ?? ctx.currentTime + (o.in ?? 0)), bar = (o.bar ?? 0) & ~1, alive = true, timer = 0;
+    const origin = () => at - bar * BAR;
+    const plan = () => { if (!alive) return; while (at < ctx.currentTime + 2.6) { const b = bar % 8; A._lullaby({ at, from: b, to: b + 2, dest: L }); at += 2 * BAR; bar += 2; } timer = setTimeout(plan, 600); };
+    plan();
+    const h = {
+      set(lv, sec = 2) { const n = ctx.currentTime; for (const k in lv) if (L[k]) { L[k].gain.cancelScheduledValues(n); L[k].gain.setTargetAtTime(lv[k], n, Math.max(0.01, sec / 3)); } },
+      next() { return [bar % 8, at]; },
+      barTime(b, after) { const n = after ?? ctx.currentTime + 0.75; let tb = origin() + (b % 8) * BAR; while (tb < n) tb += 8 * BAR; return tb; },
+      stop(sec = 2) { if (!alive) return; alive = false; clearTimeout(timer); live.delete(h); const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setTargetAtTime(0.0001, n, sec / 4); setTimeout(() => { try { bus.disconnect(); } catch (_) {} }, (sec + 4) * 1000); },
+    };
+    live.add(h);
+    return h;
+  },
+  // The toy playing the tune: bars o.from to o.to on a tiny music box, o.oct octaves up (default 2 = one octave over the
+  // voice), bar o.from starting at o.at. Each tooth: its note and a slightly detuned twin, its first overtone (6.27 times up,
+  // a bar clamped at one end) dying fast, and the pin's tick; through the little box's two wooden resonances.
+  toyTune(o = {}) {
+    if (!ctx) return;
+    const T8 = A._T8, from = o.from ?? 0, to = o.to ?? 2, oct = o.oct ?? 2, g0 = o.gain ?? 1, at0 = Math.max(o.at ?? 0, ctx.currentTime + 0.1);
+    const bx = ctx.createBiquadFilter(), bx2 = ctx.createBiquadFilter();
+    bx.type = 'peaking'; bx.frequency.value = 720; bx.Q.value = 1.2; bx.gain.value = 6; bx2.type = 'peaking'; bx2.frequency.value = 1900; bx2.Q.value = 2; bx2.gain.value = 4;
+    bx.connect(bx2); bx2.connect(A._out(0, 0.75, A._verb(0.4), 0.55));
+    // teeth: the notes, plucked
+    for (const [a, , f] of A._tuneEv(at0, from, to - from)) {
+      const at = a + (Math.random() - 0.5) * 0.008, fr = f * oct, dd = Math.min(2.8, 2.0 * Math.sqrt(587 / fr));
+      for (const [m, gm, dm] of [[1, 1, 1], [1.0017, 0.45, 0.85], [6.27, 0.16, 0.1]]) {
+        if (fr * m > 15000) continue;
+        const os = ctx.createOscillator(), v = ctx.createGain(); os.frequency.value = fr * m;
+        v.gain.value = 0; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.05 * gm * g0, at + 0.002); v.gain.exponentialRampToValueAtTime(0.0001, at + dd * dm);
+        os.connect(v); v.connect(bx); os.start(at); os.stop(at + dd * dm + 0.05);
+      }
+      const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf;
+      b.type = 'bandpass'; b.frequency.value = Math.min(9000, fr * 6); b.Q.value = 2.5;
+      v.gain.value = 0; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(0.045 * g0, at + 0.0008); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.01);
+      s.connect(b); b.connect(v); v.connect(bx); s.start(at, Math.random()); s.stop(at + 0.03);
+    }
+  },
+  // a short burst of band-passed noise (a struck, slapped or popped thing), peaking 1.2 ms after at and gone by at + dec
+  _burst(at, fr, q, gain, dec, out) {
+    const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf;
+    b.type = 'bandpass'; b.frequency.value = fr; b.Q.value = q; v.gain.value = 0; v.gain.setValueAtTime(0.0001, at); v.gain.exponentialRampToValueAtTime(gain, at + 0.0012); v.gain.exponentialRampToValueAtTime(0.0001, at + dec);
+    s.connect(b); b.connect(v); v.connect(out); s.start(at, Math.random() * 1.5); s.stop(at + dec + 0.02);
+  },
+  // A child's small hands clapping once: the skin of two small palms meeting (a short bright slap), the air cupped between
+  // them pushed out (a duller, lower pop), and the little room giving it back a moment later.
+  clap(level = 1, o = {}) {
+    if (!ctx) return;
+    const t = o.at ?? ctx.currentTime + 0.01, pan = o.pan ?? 0, g = 2 * level * (0.85 + 0.3 * Math.random()), f = 1 + (Math.random() - 0.5) * 0.12;
+    const dry = A._out(pan, 1, null, 0);
+    // slap: the skin of the palms meeting, short and bright (a small hand: higher than a grown-up's)
+    A._burst(t, 2300 * f, 1.2, 0.9 * g, 0.03, dry);
+    // pop: the air cupped between the palms pushed out, lower and rounder
+    A._burst(t + 0.001, 820 * f, 2.2, 0.75 * g, 0.045, dry);
+    // room: the small padded room giving it back, soft and dull, two reflections close behind
+    { const lp = ctx.createBiquadFilter(), v = ctx.createGain(); lp.type = 'lowpass'; lp.frequency.value = 1800; v.gain.value = 1; lp.connect(v); v.connect(dry);
+      A._burst(t + 0.011, 1500 * f, 0.9, 0.3 * g, 0.06, lp); A._burst(t + 0.019, 1100 * f, 0.9, 0.22 * g, 0.08, lp); }
+  },
+  // A memory arriving, set off by the toy: pressure in the ears, the toy's own note rubbed up out of nothing like a
+  // wetted glass rim (with its octave and two partials that do not quite agree), and a few specks of glass after it.
+  recall(d = 2.6) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // pressure: a slow push in the ears
+    A._thump(t, 44, 1.7, 0.2);
+    // the rim: the toy's note and its partials, rubbed, swelling and left ringing
+    A._body(t + 0.05, [293.66, 587.9, 884, 1183], d, 0.05, { q: 130, swell: d * 0.55 });
+    // specks: glass glints scattered after the swell
+    A._glints(t + d * 0.4, d * 0.8, 9, 1170, 4700, 0.024, 0.9, 0.03, 1.2);
+  },
+  // Small fingers touching the jewel: skin landing on something hard, the jewel ringing from the touch, a few specks.
+  toyTouch() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+    // contact: a soft knock of a fingertip
+    A._thump(t, 190, 0.1, 0.07);
+    // the jewel: rings from the touch, high and short
+    A._body(t + 0.004, [1174.7, 1763, 2664, 3540], 2.4, 0.016, { q: 220 });
+    // specks: a few glints out of it
+    A._glints(t + 0.06, 1.1, 6, 2350, 7000, 0.005, 0.5, 0, 1.3);
+  },
+  // Everything heard as if through a wall: a low-pass on the whole output, k 0 (open) to 1 (most shut). It opens again
+  // by itself about a second after the last call, so a scene holds it shut by calling it every frame, and a scene that
+  // is abandoned mid-way cannot leave the game muffled.
+  _muffle(k = 1) {
+    if (!ctx || !out) return;
+    if (!A._wall) { const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000; lp.Q.value = 0.4; out.disconnect(); out.connect(lp); lp.connect(ctx.destination); A._wall = lp; }
+    const n = ctx.currentTime, p = A._wall.frequency;
+    p.cancelScheduledValues(n); p.setTargetAtTime(20000 * Math.pow(0.026, Math.max(0, Math.min(1, k))), n, 0.12); p.setTargetAtTime(20000, n + 0.7, 0.4);
+  },
+  // The nursery, a low padded room deep in the ship: the ship's hum coming through the padding, a slow soft double beat
+  // in the floor under the cradle (a heart heard through cushions), and the still hush of a small soft room. A loop:
+  // returns { stop(seconds) }. The beat is laid out a few seconds ahead at a time.
+  nursery() {
+    if (!ctx) return { stop() {} };
+    const t = ctx.currentTime + 0.05, bus = ctx.createGain(), nodes = [];
+    bus.gain.setValueAtTime(0.0001, t); bus.gain.exponentialRampToValueAtTime(1, t + 3); bus.connect(master);
+    // hum: two low notes a hair apart through a padded wall, beating slowly
+    for (const [f, g] of [[49, 0.05], [49.6, 0.04], [98.3, 0.018]]) {
+      const o = ctx.createOscillator(), lp = ctx.createBiquadFilter(), v = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 160; lp.Q.value = 0.5; v.gain.value = g;
+      o.connect(lp); lp.connect(v); v.connect(bus); o.start(t); nodes.push(o);
+    }
+    // beat: a soft low double knock every 1.7 s, felt through the floor more than heard
+    const beat = (at) => {
+      for (const [dl, g] of [[0, 0.07], [0.32, 0.045]]) {
+        const o = ctx.createOscillator(), v = ctx.createGain(), lp = ctx.createBiquadFilter();
+        o.frequency.setValueAtTime(64, at + dl); o.frequency.exponentialRampToValueAtTime(40, at + dl + 0.28);
+        lp.type = 'lowpass'; lp.frequency.value = 140;
+        v.gain.setValueAtTime(0.0001, at + dl); v.gain.exponentialRampToValueAtTime(g, at + dl + 0.04); v.gain.exponentialRampToValueAtTime(0.0001, at + dl + 0.34);
+        o.connect(lp); lp.connect(v); v.connect(bus); o.start(at + dl); o.stop(at + dl + 0.4);
+        // the padding's give: a little pressed air in the same knock
+        const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), w = ctx.createGain(); s.buffer = noiseBuf;
+        b.type = 'lowpass'; b.frequency.value = 260; w.gain.setValueAtTime(0.0001, at + dl); w.gain.exponentialRampToValueAtTime(g * 0.5, at + dl + 0.05); w.gain.exponentialRampToValueAtTime(0.0001, at + dl + 0.25);
+        s.connect(b); b.connect(w); w.connect(bus); s.start(at + dl, Math.random()); s.stop(at + dl + 0.3);
+      }
+    };
+    let next = t + 0.8, alive = true;
+    const plan = () => { if (!alive) return; while (next < ctx.currentTime + 6) { beat(next); next += 1.7; } setTimeout(plan, 2000); };
+    plan();
+    // hush: the still air of a small soft room, no movement in it
+    { const s = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), hp = ctx.createBiquadFilter(), v = ctx.createGain();
+      s.buffer = noiseBuf; s.loop = true; lp.type = 'lowpass'; lp.frequency.value = 700; hp.type = 'highpass'; hp.frequency.value = 120; v.gain.value = 0.07;
+      s.connect(hp); hp.connect(lp); lp.connect(v); v.connect(bus); s.start(t, Math.random()); nodes.push(s); }
+    const h = { stop(sec = 1) { alive = false; const n = ctx.currentTime; bus.gain.cancelScheduledValues(n); bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), n); bus.gain.exponentialRampToValueAtTime(0.0001, n + sec); for (const o of nodes) try { o.stop(n + sec + 0.1); } catch (_) {} live.delete(h); } };
+    live.add(h);
+    return h;
+  },
+  // A low upholstered couch taking weight (k 0 a hand on it .. 1 someone lying back): the cushion pressing down, the
+  // frame under it giving a short creak (stick-slip pulses into the wood's two low modes), the cloth drawn over the seat.
+  couch(k = 1) {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02, d = 0.5 + 0.9 * k;
+    // cushion: air pressed out of the padding, a soft low push
+    { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf;
+      b.type = 'lowpass'; b.frequency.value = 320; b.Q.value = 0.7;
+      v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.16 * (0.4 + k), t + d * 0.35); v.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      s.connect(b); b.connect(v); v.connect(master); s.start(t, Math.random()); s.stop(t + d + 0.05); }
+    // frame: a creak, a run of tiny slips each ringing the frame's low modes
+    { const n = Math.round(6 + 14 * k), span = 0.25 + 0.5 * k;
+      for (let i = 0; i < n; i++) {
+        const at = t + 0.12 + span * Math.pow(i / n, 0.8) + Math.random() * 0.012, s = ctx.createBufferSource(), e = ctx.createGain(); s.buffer = noiseBuf;
+        e.gain.setValueAtTime(0.0001, at); e.gain.exponentialRampToValueAtTime(1, at + 0.002); e.gain.exponentialRampToValueAtTime(0.0001, at + 0.012);
+        s.connect(e);
+        for (const [f, g] of [[183, 0.5], [311, 0.35], [742, 0.12]]) {
+          const b = ctx.createBiquadFilter(), v = ctx.createGain(); b.type = 'bandpass'; b.frequency.value = f * (0.97 + 0.06 * i / n); b.Q.value = 18;
+          v.gain.setValueAtTime(g * 4.5 * (0.5 + 0.5 * k), at); v.gain.exponentialRampToValueAtTime(0.0001, at + 0.18);
+          e.connect(b); b.connect(v); v.connect(master);
+        }
+        s.start(at, Math.random()); s.stop(at + 0.2);
+      } }
+    // cloth: fabric drawn over the seat, a dry short rustle
+    { const s = ctx.createBufferSource(), b = ctx.createBiquadFilter(), v = ctx.createGain(); s.buffer = noiseBuf;
+      b.type = 'bandpass'; b.frequency.value = 3200; b.Q.value = 0.8;
+      v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(0.03 * (0.5 + k), t + 0.08); v.gain.setValueAtTime(0.03 * (0.5 + k), t + d * 0.4); v.gain.exponentialRampToValueAtTime(0.0001, t + d * 0.7);
+      s.connect(b); b.connect(v); v.connect(master); s.start(t, Math.random()); s.stop(t + d); }
+  },
+  // ==== end reveal cues ====
   honk() { A.tone(180 + Math.random() * 120, 0.25, { type: 'square', g: 0.12, to: 90 }); },
 };
 

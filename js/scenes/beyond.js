@@ -388,6 +388,283 @@ export async function mandala() {
   return 'end:' + end;
 }
 
+// ---------- the mantis on the sill (Communion morning) ----------
+// A real praying mantis, about 11 cm, outside the window. They climb up the front of the outside sill from below, out of
+// sight: the hooked forelegs reach up over the edge and grip the top, the head comes up over it, then the body pivots up
+// over the edge and walks on, the middle and hind feet stepping up after it, the forelegs letting go and folding, and the
+// weight settles onto the legs. Everything is solved each frame, nothing keyframed: the body is a rigid frame pivoting
+// round the sill's edge at a fixed clearance (so no part of it can pass into the stone), every leg is two-bone IK to a
+// planted foot or a gripping hook (the hooks' paths arc over the edge), and the head is aimed at what they look at.
+// Parts are placed in world space every frame (the legs have no hierarchy); the body, prothorax and head are groups.
+// Sill: front face x = SF, top y = SS; the wall plane (and the glass behind it) is x = -2.5: nothing goes past SW.
+const SF = -2.655, SS = 0.82, SW = -2.505, MZ = 0.15, MS = 1.25;   // the sill top stands 1 cm over the frame's bottom rail, so their feet show
+function windowMantis() {
+  const M = new THREE.Group();
+  // green cuticle lit from behind by the morning: a rim of light at the edges, and a little light coming through
+  const rimMat = (color, rim, o = {}) => {
+    const m = new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? 0.42, side: o.side ?? THREE.FrontSide });
+    const rc = new THREE.Color(rim);
+    m.onBeforeCompile = (s) => {
+      s.uniforms.uRim = { value: rc };
+      s.fragmentShader = 'uniform vec3 uRim;\n' + s.fragmentShader.replace('#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n  { float f = 1.0 - abs(dot(normal, normalize(vViewPosition))); totalEmissiveRadiance += uRim * (0.1 + 0.9 * f * f * f); }');
+    };
+    m.customProgramCacheKey = () => 'mantisRim' + (o.side === THREE.DoubleSide ? 'D' : 'F');
+    return m;
+  };
+  const body = rimMat(0x5a9a30, 0x7da83a), wingM = rimMat(0x7fb84a, 0x9ccf58, { side: THREE.DoubleSide, rough: 0.55 }), eyeM = rimMat(0x9dc65a, 0x8ab048, { rough: 0.18 });
+  const dark = new THREE.MeshBasicMaterial({ color: 0x0a0d06 });
+  const mk = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); return m; };
+  const ell = (rx, ry, rz, w = 14, h = 10) => new THREE.SphereGeometry(1, w, h).scale(rx, ry, rz);
+  // a tapering tube along +y from 0 to L (lathe of radius r0 at the base to r1 at the end)
+  const rod = (L, r0, r1, seg = 8) => new THREE.CylinderGeometry(r1, r0, L, seg, 1).translate(0, L / 2, 0);
+  // body frame (x to the left side, y dorsal, z forward), origin at the thorax between the middle legs
+  const bodyG = new THREE.Group(); M.add(bodyG);
+  bodyG.add(mk(ell(0.0046, 0.0042, 0.0085), body, 0, 0, -0.004));                                    // meso- and metathorax
+  const abd = new THREE.Group(); abd.position.set(0, 0.001, -0.006); bodyG.add(abd);
+  { // abdomen: flattened spindle, tip slightly up; the folded tegmina lie over it like two leaves, a roof along the middle
+    const prof = [[0.0004, 0], [0.006, 0.008], [0.0084, 0.024], [0.0078, 0.042], [0.0052, 0.056], [0.0014, 0.066], [0.0002, 0.068]].map(([r, y]) => new THREE.Vector2(r, y));
+    const g = new THREE.LatheGeometry(prof, 12); g.rotateX(-Math.PI / 2); g.scale(1, 0.62, 1);   // +y → -z (backwards)
+    abd.add(mk(g, body));
+    const leaf = new THREE.Shape(); leaf.moveTo(0, 0.001); leaf.quadraticCurveTo(0.0092, -0.006, 0.0088, -0.03); leaf.quadraticCurveTo(0.0082, -0.056, 0.0012, -0.066); leaf.lineTo(0, -0.064); leaf.lineTo(0, 0.001);
+    const lg = new THREE.ShapeGeometry(leaf, 8); lg.rotateX(Math.PI / 2);   // shape y → -z
+    for (const s of [-1, 1]) { const w = mk(s > 0 ? lg : lg.clone().scale(-1, 1, 1), wingM, 0, 0.0056, 0.001); w.rotation.z = -s * 0.22; abd.add(w); }
+    // a darker vein along each wing
+    for (const s of [-1, 1]) { const v = mk(rod(0.05, 0.00045, 0.0003, 5), new THREE.MeshStandardMaterial({ color: 0x4f8a2a, roughness: 0.6 }), s * 0.0052, 0.0062, -0.004); v.rotation.x = -Math.PI / 2 - 0.02; v.rotation.z = s * 0.05; abd.add(v); }
+  }
+  const pro = new THREE.Group(); pro.position.set(0, 0.0012, 0.004); bodyG.add(pro);
+  { // the long prothorax, widening where the forelegs join, with a faint keel
+    const prof = [[0.0022, 0], [0.0026, 0.006], [0.0021, 0.019], [0.0036, 0.029], [0.003, 0.034], [0.0021, 0.038]].map(([r, y]) => new THREE.Vector2(r, y));
+    const g = new THREE.LatheGeometry(prof, 10); g.rotateX(Math.PI / 2); g.scale(1, 0.85, 1);
+    pro.add(mk(g, body));
+  }
+  const head = new THREE.Group(); head.position.set(0, 0.0004, 0.039); pro.add(head);
+  // head frame: x to the left, y the crown, z the face (looks along +z): triangular, wide eyes at the top corners, mouth down
+  head.add(mk(ell(0.0050, 0.0042, 0.003), body, 0, 0.0004, 0));
+  const eyes = [-1, 1].map((s) => { const e = mk(ell(0.0029, 0.0037, 0.0029), eyeM, s * 0.0054, 0.0021, 0.0002); e.rotation.z = -s * 0.35; head.add(e); return e; });
+  { const c = mk(new THREE.ConeGeometry(0.0026, 0.0058, 8), body, 0, -0.0043, 0.0005); c.rotation.x = Math.PI; head.add(c); }   // clypeus and mandibles
+  const pupils = eyes.map(() => { const p = mk(new THREE.SphereGeometry(0.00085, 8, 6), dark); head.add(p); return p; });   // the pseudopupils
+  const antM = new THREE.MeshStandardMaterial({ color: 0x6f8f3a, roughness: 0.6 });
+  const ants = [-1, 1].map((s) => {
+    const cv = new THREE.CatmullRomCurve3([V(s * 0.0013, 0.0034, 0.0022), V(s * 0.006, 0.014, 0.008), V(s * 0.012, 0.024, 0.006), V(s * 0.019, 0.03, -0.002)]);
+    const a = new THREE.Group(); a.position.set(s * 0.0013, 0.0034, 0.0022); head.add(a);
+    const m = mk(new THREE.TubeGeometry(cv, 16, 0.00042, 4), antM, -s * 0.0013, -0.0034, -0.0022); a.add(m); return a;
+  });
+  // legs: each bone a group whose +y runs from its joint to the next; spines on the raptorial bones face -x (the fold)
+  const bone = (L, r0, r1, extra) => { const g = new THREE.Group(); g.add(mk(rod(L, r0, r1), body)); if (extra) extra(g); M.add(g); Object.assign(g.userData, { L, r0, r1 }); return g; };
+  const spines = (L, n, len) => (g) => { for (let i = 0; i < n; i++) { const c = mk(new THREE.ConeGeometry(0.00035, len, 4), body, -0.0012, L * (0.25 + 0.65 * i / n), 0); c.rotation.z = Math.PI / 2 + 0.5; g.add(c); } };
+  const fore = [-1, 1].map((s) => ({
+    s, coxa: bone(0.016, 0.0022, 0.0018, (g) => g.add(mk(ell(0.0019, 0.0019, 0.0019, 8, 6), body, 0, 0.016, 0))),
+    fem: bone(0.022, 0.0027, 0.0016, (g) => { g.children[0].scale.x = 0.7; spines(0.022, 7, 0.0026)(g); }),
+    tib: bone(0.011, 0.0014, 0.0009, (g) => { spines(0.011, 3, 0.0016)(g); const h = mk(new THREE.ConeGeometry(0.0008, 0.0036, 5), body, -0.0006, 0.0122, 0); h.rotation.z = 0.9; g.add(h); }),
+  }));
+  const walk = [[-1, 'm'], [1, 'm'], [-1, 'h'], [1, 'h']].map(([s, k]) => ({
+    s, k, fem: bone(k === 'm' ? 0.017 : 0.021, 0.0011, 0.0009), tib: bone(k === 'm' ? 0.022 : 0.027, 0.0008, 0.0005, (g) => g.add(mk(ell(0.0009, 0.0009, 0.0009, 6, 4), body, 0, g.userData?.L || 0, 0))),
+    foot: V(), from: V(), to: V(), surf: 'face', step: null,
+  }));
+  walk.forEach((w) => { w.tib.children[1].position.y = w.tib.userData.L; });
+  return { M, bodyG, abd, pro, head, eyes, pupils, ants, fore, walk };
+}
+
+// Pose the mantis at climb time t (seconds; the climb runs 0..7.2 and then holds). Returns a log of clearances.
+const _m = { T: V(), f: V(), u: V(), r: V(), a: V(), b: V(), k: V(), p: V(), d: V(), q: new THREE.Quaternion(), q2: new THREE.Quaternion(), mx: new THREE.Matrix4(), x: V(), y: V(), z: V() };
+const smt = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// body frame at time t: theta (0 on the face heading up, PI/2 on top heading in), sigma (where along the body the edge is),
+// c (how far the body's axis rides off the surface), alpha (the prothorax raised), lift (abdomen)
+function mantisFrame(t) {
+  const th = Math.PI / 2 * smt(3.1, 5.0, t);
+  const sg = lerp(lerp(lerp(0.066, 0.062, smt(0, 1.8, t)), 0.034, smt(1.8, 3.1, t)), -0.045, smt(3.5, 5.7, t));
+  const land = t > 5.5 ? -0.0019 * Math.exp(-(t - 5.5) * 3.2) * Math.sin((t - 5.5) * 9) : 0;   // the weight comes down onto the legs and settles
+  const c = 0.0105 + 0.001 * smt(3.1, 4.2, t) * (1 - smt(4.8, 5.5, t)) + land;
+  const alpha = lerp(lerp(lerp(0.12, 0.42, smt(1.8, 2.9, t)), 0.12, smt(3.1, 4.4, t)), 0.85, smt(5.3, 6.8, t));   // at the end reared up, forelegs held high
+  const lift = 0.1 * smt(3.4, 4.4, t) * (1 - smt(4.6, 5.6, t)) + 0.1 * smt(5.6, 6.8, t) - 0.04 * Math.sin(Math.PI * smt(5.5, 6.3, t));
+  return { th, sg, c, alpha, lift };
+}
+function poseMantis(m, t, lookAt, out) {
+  const { T, f, u, r } = _m, F = mantisFrame(t);
+  f.set(Math.sin(F.th), Math.cos(F.th), 0); u.set(-Math.cos(F.th), Math.sin(F.th), 0); r.set(0, 0, -1);   // r = u x f (right-handed: with y up and z forward, x is the left side)
+  T.set(SF, SS, MZ).addScaledVector(u, F.c).addScaledVector(f, -F.sg);
+  // the sway (a mantis rocks like a leaf in the wind), once settled
+  const sw = smt(6.2, 7.4, t); T.z += sw * 0.0016 * Math.sin(t * 2 * Math.PI * 0.9) ; T.y += sw * 0.0004 * Math.sin(t * 2 * Math.PI * 1.8);
+  _m.mx.makeBasis(r, u, f); m.bodyG.quaternion.setFromRotationMatrix(_m.mx); m.bodyG.position.copy(T);
+  m.pro.rotation.x = -F.alpha; m.abd.rotation.x = F.lift;
+  m.M.updateMatrixWorld(true);
+  // head: aimed at what they look at, crown kept toward the body's up, then turned in its own frame
+  { const hp = m.head.getWorldPosition(_m.a), z = _m.z.subVectors(lookAt, hp).normalize(), x = _m.x.crossVectors(_m.y.copy(u).lerp(V(0, 1, 0), 0.5), z).normalize(), y = _m.y.crossVectors(z, x);
+    _m.mx.makeBasis(x, y, z); _m.q.setFromRotationMatrix(_m.mx); m.head.parent.getWorldQuaternion(_m.q2).invert(); m.head.quaternion.copy(_m.q2.multiply(_m.q)); }
+  // antennae: a slow sweep, faster while they climb
+  m.ants.forEach((a, i) => { a.rotation.set(0.25 * Math.sin(t * 2.3 + i * 1.7) + 0.15 * smt(1.8, 2.6, t), 0.2 * Math.sin(t * 1.3 + i), 0); });
+  m.M.updateMatrixWorld(true);
+  return F;
+}
+
+// two-bone IK in world space: from joint A to target P with lengths L1, L2, the knee bent toward pole; returns the knee in K
+function ik2(A, P, L1, L2, pole, K) {
+  const d = _m.d.subVectors(P, A); let D = d.length(); d.divideScalar(D || 1);
+  D = Math.min(Math.max(D, Math.abs(L1 - L2) + 1e-5), L1 + L2 - 1e-5);
+  const ca = (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
+  const pp = _m.p.copy(pole).addScaledVector(d, -pole.dot(d)).normalize();
+  return K.copy(A).addScaledVector(d, L1 * ca).addScaledVector(pp, L1 * sa);
+}
+// Two-bone IK that keeps the leg out of the sill: the knee is swung round the hip-to-foot line (the pole turned about it)
+// to the nearest angle, from where it was last frame, at which no sampled point of femur or tibia (its last 15 cm short
+// of the foot or hook, which rest on the stone) is inside the stone; it relaxes back toward the plain pole when that is
+// clear. Works in the mantis group's own frame, against the sill as it is there (the group is scaled about the edge).
+const DLO = new THREE.Vector3(SF, SS - (SS - 0.6) / MS, MZ - (MZ + 0.35) / MS), DHI = new THREE.Vector3(SF + (-2.49 - SF) / MS, SS, MZ + (1.15 - MZ) / MS);
+const _c = { q: new THREE.Quaternion(), pr: V(), d: V(), p: V(), tip: V() };
+function legClear(A, K, tip, r0, r1) {
+  let m = 9; const p = _c.p;
+  for (let i = 0; i <= 6; i++) {   // femur
+    p.lerpVectors(A, K, i / 6);
+    const cx = Math.max(DLO.x - p.x, 0, p.x - DHI.x), cy = Math.max(DLO.y - p.y, 0, p.y - DHI.y), cz = Math.max(DLO.z - p.z, 0, p.z - DHI.z);
+    m = Math.min(m, Math.hypot(cx, cy, cz) - r0);
+  }
+  for (let i = 0; i <= 5; i++) {   // tibia, short of the foot
+    p.lerpVectors(K, tip, 0.85 * i / 5);
+    const cx = Math.max(DLO.x - p.x, 0, p.x - DHI.x), cy = Math.max(DLO.y - p.y, 0, p.y - DHI.y), cz = Math.max(DLO.z - p.z, 0, p.z - DHI.z);
+    m = Math.min(m, Math.hypot(cx, cy, cz) - r1);
+  }
+  return m;
+}
+function ikClear(leg, A, P, L1, L2, pole, K) {
+  const d = _c.d.subVectors(P, A).normalize();
+  const tryA = (a) => {
+    _c.q.setFromAxisAngle(d, a); ik2(A, P, L1, L2, _c.pr.copy(pole).applyQuaternion(_c.q), K);
+    _c.tip.subVectors(P, K).normalize().multiplyScalar(L2).add(K);
+    return legClear(A, K, _c.tip, L1 * 0.13, L2 * 0.1) >= 0.0003;
+  };
+  const a0 = leg.ang || 0, rel = a0 - Math.sign(a0) * Math.min(Math.abs(a0), 0.05);
+  let a = null;
+  if (tryA(rel)) a = rel; else if (tryA(a0)) a = a0;
+  else for (let i = 1; i <= 26 && a === null; i++) for (const sg of [1, -1]) { if (tryA(a0 + sg * i * 0.1)) { a = a0 + sg * i * 0.1; break; } }
+  leg.ang = a === null ? a0 : a; tryA(leg.ang);
+  return K;
+}
+// lay a bone from a toward b; its -x (spine side) turned away from `side`
+function layBone(g, a, b, side) {
+  const y = _m.y.subVectors(b, a).normalize(), x = _m.x.copy(side).addScaledVector(y, -side.dot(y)).normalize(), z = _m.z.crossVectors(x, y);
+  _m.mx.makeBasis(x, y, z); g.quaternion.setFromRotationMatrix(_m.mx); g.position.copy(a);
+}
+
+// the body frame at time t without the sway, into T, f, u, r (for predicting where a stepping foot should land)
+function mantisBasis(t, T, f, u, r) {
+  const F = mantisFrame(t);
+  f.set(Math.sin(F.th), Math.cos(F.th), 0); u.set(-Math.cos(F.th), Math.sin(F.th), 0); r.set(0, 0, -1);   // r = u x f (right-handed: with y up and z forward, x is the left side)
+  return T.set(SF, SS, MZ).addScaledVector(u, F.c).addScaledVector(f, -F.sg);
+}
+// stance spots (body frame: right, forward) for the middle and hind feet; the step schedule: [start, end, surface] per leg
+const STANCE = { m: [0.022, 0.009], h: [0.025, -0.03] };
+const STEPS = [
+  [[2.3, 2.7, 'face'], [3.7, 4.2, 'top'], [5.95, 6.25, 'top']],   // middle left
+  [[2.5, 2.9, 'face'], [3.85, 4.35, 'top'], [6.1, 6.4, 'top']],   // middle right
+  [[1.9, 2.3, 'face'], [3.3, 3.65, 'face'], [4.2, 4.75, 'top'], [5.75, 6.05, 'top']],   // hind left
+  [[2.1, 2.5, 'face'], [3.45, 3.8, 'face'], [4.4, 4.95, 'top'], [5.85, 6.15, 'top']],   // hind right
+];
+const _w = { T: V(), f: V(), u: V(), r: V(), A: V(), E: V(), K: V(), P: V(), C: V(), G: V(), pole: V(), s: V(), fold: V(), cd: V(), cdF: V(), fdF: V(), poleF: V(), tg: V(), cg: V(), n: V() };
+const spot = (w, t, out) => {   // where this foot should stand on its surface, for the body as it will be at t
+  const { T, f, u, r } = _w, st = STANCE[w.k]; mantisBasis(t, T, f, u, r);
+  out.copy(T).addScaledVector(r, w.s * st[0]).addScaledVector(f, st[1]);
+  if (w.surf === 'top') { out.y = SS + 0.0009; out.x = Math.max(out.x, SF + 0.004); } else { out.x = SF - 0.0009; out.y = Math.min(out.y, SS - 0.004); }   // on the foot's pad
+  return out;
+};
+const bez2 = (a, c, b, e, out) => out.copy(a).multiplyScalar((1 - e) * (1 - e)).addScaledVector(c, 2 * e * (1 - e)).addScaledVector(b, e * e);
+const UPOUT = new THREE.Vector3(-0.35, 1, 0).normalize(), OUTUP = new THREE.Vector3(-1, 0.8, 0).normalize(), FACE_N = new THREE.Vector3(-1, 0, 0), TOP_N = new THREE.Vector3(0, 1, 0);
+// legs at climb time t (after poseMantis): returns how many feet or hooks touched down or lifted this frame (for the sound)
+function legsMantis(m, t, prevT) {
+  let taps = 0;
+  // joints in the mantis group's own frame (the group is scaled about the sill edge; the legs are laid in that frame)
+  const pv = (p, x, y, z) => m.M.worldToLocal(m.pro.localToWorld(p.set(x, y, z))), bv = (p, x, y, z) => m.M.worldToLocal(m.bodyG.localToWorld(p.set(x, y, z)));
+  const proQ = m.pro.getWorldQuaternion(_m.q2);
+  // forelegs: folded (praying), reaching over the edge to hook the sill top, then letting go and folding again
+  for (const L of m.fore) {
+    const s = L.s, J = pv(_w.A, s * 0.0032, -0.0022, 0.029);
+    // folded: while on the face, held up off it (coxae forward, femurs up and out); once up on the sill, the praying pose
+    // (coxae hanging, femurs along the raised prothorax, tibiae closed back on them)
+    const pk = smt(6.0, 6.9, t);   // (once the prothorax is up, so the hanging coxae clear the stone)
+    const cdF = _w.cdF.set(s * lerp(0.18, 0.15, pk), lerp(-0.6, -0.9, pk), lerp(0.78, 0.05, pk)).normalize().applyQuaternion(proQ), fdF = _w.fdF.set(s * 0.05, lerp(0.78, -0.05, pk), lerp(0.62, 1, pk)).normalize().applyQuaternion(proQ);
+    const poleF = _w.poleF.set(0, 0.4, 1).normalize().applyQuaternion(proQ);
+    const G = _w.G.set(SF + 0.004, SS + 0.0011, MZ - s * 0.0075);   // hooked over the edge (body x is world -z)
+    // the hooks let go as the body tips over the edge and the middle feet come up (later, the body would be over them)
+    const r0 = s < 0 ? 0.15 : 0.5, r1 = r0 + 1.1, l0 = s < 0 ? 3.6 : 3.72, l1 = l0 + 0.6;
+    const reach = smt(r0, r1, t), let_ = smt(l0, l1, t), w = reach * (1 - let_);   // w: how far the leg is set for gripping
+    if ((prevT < r1 && t >= r1) || (prevT < l0 && t >= l0)) taps++;
+    // gripping, the coxa is the third bone of the reach: turned between pointing at the hook's spot and out-and-up off the
+    // face, to the angle that leaves femur and tibia a comfortable bend to it (a straight or fully closed leg would have
+    // to let go, or push the hook through the stone)
+    const toG = _w.tg.subVectors(G, J).normalize(), Lc = L.coxa.userData.L, Dt = 0.024;
+    const dist = (b) => _w.cg.copy(toG).lerp(OUTUP, b).normalize().multiplyScalar(Lc).add(J).distanceTo(G);
+    let lo = 0, hi = 1; if (dist(0) >= Dt) hi = 0; else if (dist(1) <= Dt) lo = 1; else for (let i = 0; i < 16; i++) { const mid = (lo + hi) / 2; if (dist(mid) < Dt) lo = mid; else hi = mid; }
+    _w.cg.copy(toG).lerp(OUTUP, (lo + hi) / 2).normalize();
+    const cd = _w.cd.copy(cdF).lerp(_w.cg, w).normalize();
+    const Ec = _w.E.copy(J).addScaledVector(cd, L.coxa.userData.L);
+    // folded: the tibia closed back along the femur's spines (not shut tight: a fully closed leg is a singular pose for the IK)
+    const fold = _w.fold.copy(Ec).addScaledVector(fdF, 0.0125).addScaledVector(poleF, 0.0025).add(_w.s.set(-s * 0.001, 0, 0).applyQuaternion(proQ));
+    const P = _w.P;
+    if (t < l0) {   // up in front of the face, over the edge, and down onto the top from straight above
+      const A1 = _w.cg.set(G.x, SS + 0.011, G.z);
+      if (reach < 0.78) bez2(fold, _w.C.set(SF - 0.007, SS + 0.022, G.z), A1, reach / 0.78, P); else P.lerpVectors(A1, G, smt(0.78, 1, reach));
+    }
+    else bez2(G, _w.C.copy(G).add(_w.s.set(0.004, 0.016, 0)), fold, let_, P);             // lifted off and drawn back in under the head
+    // the knee bends in the leg's own up-and-down plane: the pole is square to the hip-to-hook line and the body's side
+    // axis, so it never lines up with the leg and flips the knee over (a blend between two poles did, at the start of the reach)
+    const pole = _w.pole.subVectors(P, Ec).normalize().cross(_m.r).normalize();
+    const K = ikClear(L, Ec, P, L.fem.userData.L, L.tib.userData.L, pole, _w.K);
+    layBone(L.coxa, J, Ec, pole); layBone(L.fem, Ec, K, pole);
+    const tip = _w.s.subVectors(P, K).normalize().multiplyScalar(L.tib.userData.L).add(K); layBone(L.tib, K, tip, pole);
+    L.tip = (L.tip || V()).copy(tip); L.knee = (L.knee || V()).copy(K); L.hook = w;
+  }
+  // middle and hind legs: planted feet, stepping on the schedule; two-bone IK, knees up and out
+  m.walk.forEach((w, i) => {
+    if (!w.init) { w.surf = 'face'; spot(w, 0, w.foot); w.init = true; }
+    let stepping = false;
+    for (const [a, b, surf] of STEPS[i]) {
+      if (prevT < a && t >= a) { w.from.copy(w.foot); w.surf = surf; spot(w, b, w.to); }
+      if (t >= a && t < b) {
+        stepping = true; const e = smt(a, b, t), C = _w.C.lerpVectors(w.from, w.to, 0.5);
+        if (w.from.x < SF + 0.001 && w.to.y > SS) {   // off the face onto the top: out from the face, up past the edge, over and down
+          const Q = _w.s.set(SF - 0.005, SS + 0.009, (w.from.z + w.to.z) / 2);
+          if (e < 0.5) bez2(w.from, C.set(SF - 0.008, (w.from.y + Q.y) / 2, w.from.z), Q, e * 2, w.foot); else bez2(Q, C.set(w.to.x, SS + 0.011, w.to.z), w.to, e * 2 - 1, w.foot);
+        } else { if (w.to.y > SS) C.y += 0.008; else C.x -= 0.008; bez2(w.from, C, w.to, e, w.foot); }
+      }
+      if (prevT < b && t >= b) { w.foot.copy(w.to); taps++; }
+    }
+    const A = bv(_w.A, w.s * (w.k === 'm' ? 0.0042 : 0.0045), -0.003, w.k === 'm' ? -0.002 : -0.012);
+    const n = _w.n.lerpVectors(FACE_N, TOP_N, smt(SS - 0.03, SS + 0.01, w.foot.y));   // the surface under the foot, blended round the edge
+    const pole = _w.pole.copy(_m.u).multiplyScalar(0.6).addScaledVector(n, 0.8).addScaledVector(_m.r, w.s * 0.6).normalize();
+    const K = ikClear(w, A, w.foot, w.fem.userData.L, w.tib.userData.L, pole, _w.K);
+    layBone(w.fem, A, K, pole);
+    const tip = _w.s.subVectors(w.foot, K).normalize().multiplyScalar(w.tib.userData.L).add(K); layBone(w.tib, K, tip, pole);
+    w.tip = (w.tip || V()).copy(tip); w.knee = (w.knee || V()).copy(K); w.stepping = stepping;
+  });
+  return taps;
+}
+// For the check: the least distance from any sampled point of a leg, the body, head or antennae to the sill (negative:
+// inside it), the furthest any point gets toward the glass (x), the hooks' height over the sill top while gripping (mm),
+// and each foot's gap to the surface it stands on (mm)
+const SILL_LO = new THREE.Vector3(SF, 0.6, -0.35), SILL_HI = new THREE.Vector3(-2.49, SS, 1.15);
+function sillDist(p) {
+  const lo = SILL_LO, hi = SILL_HI, cx = Math.max(lo.x - p.x, 0, p.x - hi.x), cy = Math.max(lo.y - p.y, 0, p.y - hi.y), cz = Math.max(lo.z - p.z, 0, p.z - hi.z);
+  const out = Math.hypot(cx, cy, cz); if (out > 0) return out;
+  return -Math.min(p.x - lo.x, hi.x - p.x, p.y - lo.y, hi.y - p.y, p.z - lo.z, hi.z - p.z);
+}
+function measureMantis(m) {
+  let min = 9, at = '', maxX = -9; const p = V(), a = V(), b = V();
+  const test = (name, q, rad = 0) => { const d = sillDist(q) - rad; if (d < min) { min = d; at = name; } maxX = Math.max(maxX, q.x + rad); };
+  const segs = [];
+  m.fore.forEach((L) => [L.coxa, L.fem, L.tib].forEach((g, j) => segs.push(['fore' + L.s + ['coxa', 'femur', 'tibia'][j], g])));
+  m.walk.forEach((w) => [w.fem, w.tib].forEach((g, j) => segs.push([w.k + w.s + ['femur', 'tibia'][j], g])));
+  for (const [name, g] of segs) {   // each bone as a tapering rod (world radius), its end with the pad or hook on it
+    g.getWorldPosition(a); g.localToWorld(b.set(0, g.userData.L, 0));
+    for (let i = 0; i <= 8; i++) test(name, p.lerpVectors(a, b, i / 8), MS * lerp(g.userData.r0, g.userData.r1, i / 8));
+  }
+  for (let z = -0.074; z <= 0.006; z += 0.004) for (const [x, y] of [[0, -0.0058], [0.0085, 0], [-0.0085, 0], [0, 0.0075]]) test('body', m.bodyG.localToWorld(p.set(x * (z < -0.006 ? 1 : 0.55), y, z)));
+  for (let z = 0; z <= 0.044; z += 0.004) for (const [x, y] of [[0, -0.004], [0.004, 0], [-0.004, 0], [0, 0.004]]) test('pro', m.pro.localToWorld(p.set(x, y, z)));
+  for (const [x, y, z] of [[0, 0.007, 0], [0.009, 0.003, 0], [-0.009, 0.003, 0], [0, -0.008, 0.002], [0, 0, 0.004], [0.019, 0.03, -0.002], [-0.019, 0.03, -0.002]]) test('head', m.head.localToWorld(p.set(x, y, z)));
+  const hooks = m.fore.map((L) => (L.hook > 0.98 ? +((L.tip.y - SS) * 1000).toFixed(2) : null));
+  const feet = m.walk.map((w) => (w.stepping ? null : +((w.surf === 'top' ? w.tip.y - SS : SF - w.tip.x) * 1000).toFixed(2)));
+  return { min, at, maxX, hooks, feet, knees: [...m.fore.map((L) => L.knee.clone()), ...m.walk.map((w) => w.knee.clone())] };
+}
+
 // ---------- waking ----------
 const ENDS = {
   missing: { title: 'MISSING TIME', text: "You fought, and they switched you off. Whatever happened next, you were there for it. You just don't get to keep it.", echo: 'Echoes Budd Hopkins and David Jacobs: resistance fails, and the price is memory. To see more of the night, try not fighting.' },
@@ -401,10 +678,25 @@ export async function ending(kind) {
   E.heart = false; G.fear = kind === 'missing' ? 0.3 : 0.1;
   const day = kind === 'communion' || kind === 'sceptic';
   const R = buildBedroom(day
-    ? { clock: kind === 'communion' ? '8:08' : '7:12', ambient: 2.4, ambColor: kind === 'communion' ? 0xfff0dc : 0xf2f4f8, moon: 0, window: kind === 'communion' ? 0xffeccc : 0xeaf2fa, wall: 0x8f8a96 }
+    // morning: a low sun through the window (warm patches with the frame's and curtains' soft shadows, models.js moonify),
+    // its warm bounce, and a cooler fill from the sky that falls off across the room
+    // (the fill is a clear sky blue, only gently uneven: a bright room, not a dim one with a patch in it)
+    ? { clock: kind === 'communion' ? '8:08' : '7:12', ambient: kind === 'communion' ? 2.3 : 2.4, ambColor: kind === 'communion' ? 0xcfdcff : 0xdde6f6, moon: 0, window: kind === 'communion' ? 0xffeccc : 0xeaf2fa, wall: kind === 'communion' ? 0x9a8f96 : 0x8f8a96,
+      sun: kind === 'communion' ? 0xffb874 : 0xffe2c0, sunK: kind === 'communion' ? 22 : 16, ambK: 0.35, bounce: kind === 'communion' ? 0.3 : 0.2, spill: kind === 'communion' ? 0xffc890 : 0xfff0e0 }
     : { clock: kind === 'missing' ? '4:14' : '3:00', ambient: kind === 'missing' ? 0.95 : undefined }); // a touch more room light so the hand reads
   E.scene.add(R.group);
-  if (day) { const s = new THREE.DirectionalLight(kind === 'communion' ? 0xffe2b8 : 0xffffff, 2.2); s.position.set(-4, 2.5, 0.6); R.group.add(s); }
+  if (day) { const s = new THREE.DirectionalLight(kind === 'communion' ? 0xffd8a8 : 0xfff4e6, 1.5); s.position.set(-4, 1.8, 0.6); R.group.add(s); }   // daylight from the window side (no shadows)
+  // Communion: the stone sill outside the window, and the mantis waiting below its edge, out of sight from the bed (built
+  // now, so their materials compile while the screen is black). Only the sill's top edge shows from the bed.
+  let wm = null, mt = -1;
+  if (kind === 'communion') {
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(SILL_HI.x - SILL_LO.x, SILL_HI.y - SILL_LO.y, SILL_HI.z - SILL_LO.z), new THREE.MeshStandardMaterial({ color: 0xcdc6b6, roughness: 0.85 }));
+    sill.position.addVectors(SILL_LO, SILL_HI).multiplyScalar(0.5); R.group.add(sill);
+    wm = windowMantis(); R.group.add(wm.M);
+    wm.M.scale.setScalar(MS); wm.M.position.set(SF, SS, MZ).multiplyScalar(1 - MS);   // a big one (14 cm), scaled about the sill's edge so every contact holds
+    poseMantis(wm, 0, V(SF - 0.02, SS + 0.09, MZ)); legsMantis(wm, 0, -1);
+    wm.M.userData.measure = () => measureMantis(wm); wm.M.userData.clock = () => mt; wm.M.userData.rig = wm;   // for the headless checks
+  }
   if (kind === 'missing') setView(0, 0.86, -0.25, 0, 0.3);
   else setView(0, 0.86, -1.52, Math.PI, 0.2);
   // your body in the bed under the covers (the covers are shaped round it). 'missing': lying the wrong way round, so the
@@ -432,29 +724,37 @@ export async function ending(kind) {
     if (k <= 0) { discard(ghost); ghost = null; }
   });
   $('fade').style.background = '#000';
-  // Sitting up from the pillow (the endings that face down the bed): the lying body's shoulders and arms swing up round its
-  // hips, the eyes riding the same arc (the chin tucks first, so the view tips down early), and the covers slide a little
-  // toward the lap. The chest itself is hidden, as it would sit inside the view. Leaves E.mode 'locked'.
+  // Sitting up from the pillow (the endings that face down the bed): the eyes ride an arc round the hips (the chin tucks
+  // first, so the view tips down early), the body's torso turns up with them (makePlayerBody riseTo: its eyes stay on the
+  // camera, so the chest is below the view as when standing and never seen from outside, headless), and the covers slide a
+  // little toward the lap. The lying view sits 12 cm over the body's eyes; that gap closes over the rise. Afterwards the
+  // torso keeps following the eyes (the sceptic morning leans in), and the look is held to riseLimits() narrowed to `yaw`
+  // (so the view never turns into the open collar). Leaves E.mode 'locked'.
   const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  const sitUp = async (dur, to, pitch) => {
-    const lim = E.limits; E.limits = null; E.mode = 'locked';
+  const bu = bed.userData, eyeT = V();
+  let rising = false;
+  // headQ: the sceptic reach holds the head still while its arm is solved in the torso's frame (null: the view's own turn)
+  let headQ = null;
+  on(() => { if (rising) bu.riseTo(E.camera.position, null, headQ || E.camera.quaternion); });
+  const sitUp = async (dur, to, pitch, yaw = 1.4) => {
+    E.limits = null; E.mode = 'locked';
     A.rustle(dur * 0.8, 0.9);   // the covers slide as you come up off the pillow
-    const bu = bed.userData, hipL = bu.legs.position.clone(), hip = bed.localToWorld(hipL.clone());
-    bu.torso.children[0].visible = false;
-    const p0 = E.camera.position.clone(), pi0 = E.pitch, bz = R.blanket.position.z;
+    const hip = bed.localToWorld(bu.legs.position.clone());
+    const p0 = E.camera.position.clone(), pi0 = E.pitch, bz = R.blanket.position.z, off = bed.localToWorld(V(0, 0, 0)).sub(p0);
     const el = (p) => Math.atan2(p.y - hip.y, Math.hypot(p.x - hip.x, p.z - hip.z));
     const a0 = el(p0), a1 = el(to), r0 = p0.distanceTo(hip), r1 = to.distanceTo(hip);
     const h0 = V(p0.x - hip.x, 0, p0.z - hip.z).normalize(), h1 = V(to.x - hip.x, 0, to.z - hip.z).normalize(), h = V();
-    const rq = new THREE.Quaternion(), ax = V(1, 0, 0);
     await tween(dur, (k) => {
       const e = k * k * (3 - 2 * k), a = lerp(a0, a1, e), r = lerp(r0, r1, e);
       h.lerpVectors(h0, h1, e).normalize();
       E.camera.position.copy(hip).addScaledVector(h, r * Math.cos(a)); E.camera.position.y += r * Math.sin(a);
       E.pitch = lerp(pi0, pitch, sm(0, 0.85, k));
-      rq.setFromAxisAngle(ax, -(a - a0)); bu.torso.quaternion.copy(rq); bu.torso.position.copy(hipL).sub(h.copy(hipL).applyQuaternion(rq));   // bed x is world -x
+      bu.riseTo(eyeT.copy(E.camera.position).addScaledVector(off, 1 - e), null, E.camera.quaternion, e);
       R.blanket.position.z = bz + 0.08 * e * Math.sign(hip.z - p0.z);   // toward the lap (the 'missing' bed is end for end)
     }, (k) => k);
-    E.base.yaw = E.yaw; E.base.pitch = E.pitch; E.limits = lim;
+    rising = true;
+    const rl = bu.riseLimits(E.yaw);
+    E.base.yaw = rl.base.yaw; E.base.pitch = rl.base.pitch; E.limits = { ...rl.limits, yaw: Math.min(yaw, rl.limits.yaw) };
   };
   // the Wardens wake to the seam still in the wall: it is there as the room fades in, not switched on afterwards
   if (kind === 'wardens') { R.portal.visible = true; R.portal.children[1].visible = false; R.portal.children[0].material.transparent = true; R.portal.children[0].material.opacity = 0.35; R.portalLight.intensity = 6; }
@@ -465,7 +765,7 @@ export async function ending(kind) {
     note('missingtime');
     await say('You remember the clock saying 3:00. Then this.');
     await say('You are lying the wrong way round in your own bed. Your shirt is on backwards.'); note('wrongway');
-    await sitUp(2.8, V(0, 1.34, -0.65), -0.12); E.mode = 'look';   // up off the pillow at the foot of the bed
+    await sitUp(2.8, V(0, 1.34, -0.65), -0.12, 0.9); E.mode = 'look';   // up off the pillow at the foot of the bed; the look held near the raised hand (its arm is carried with the view)
     const me = makePlayerBody(); me.userData.torso.children[0].visible = false; me.userData.legs.visible = false; me.userData.armL.visible = false; me.userData.marks.visible = true;
     E.camera.add(me);   // lit only by the room
     bed.userData.armR.visible = false;   // the right arm that rises is the one carried with the view
@@ -475,20 +775,47 @@ export async function ending(kind) {
     await wait(3.2);   // the hand stays up, still being stared at, as the night ends
   } else if (kind === 'communion') {
     await say('Morning. You remember all of it.');
-    await say('A feeling of interconnectedness with everything that exists.');
+    await say('There\'s a feeling of interconnectedness with everything that exists. The room, the street, every living thing, the whole sky: one thing, and you are it.');
     await say('When you hurt someone, you hurt yourself. When you love someone, you love yourself.');
     if (G.toy) await say("The toy is not in your hand. You knew it wouldn't be.");
     hint('Look at the window.');
-    const bug = new THREE.Group(), gm = new THREE.MeshStandardMaterial({ color: 0x4f9a35, roughness: 0.5 });
-    const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.012, 0.09, 4, 8), gm); b.rotation.z = 0.5;
-    const h = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.025, 3), gm); h.position.set(-0.035, 0.065, 0); h.rotation.z = Math.PI;
-    bug.add(b, h);
-    for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.07), gm); l.position.set(0.01 * (i % 3 - 1), -0.01 + (i % 3) * 0.02, i < 3 ? 0.02 : -0.02); l.rotation.set(i < 3 ? 0.9 : -0.9, 0, 0.6); bug.add(l); }
-    bug.position.set(-2.45, 1.5, 0.15); bug.rotation.y = Math.PI / 2; bug.scale.setScalar(1.6); R.group.add(bug);
-    await until(() => lookingAt(bug.position, 0.25), 20);
-    hint(''); note('realmantis');
-    await say('On the outside of the glass, a small green mantis. They turn their head, and look in at you.');
+    await until(() => lookingAt(V(-2.5, 1.2, 0.4), 0.45), 20);
+    hint('');
+    // They climb up onto the sill from below while you watch (windowMantis). The eyes go to the
+    // sill's edge and then stay on their head, and the view narrows on them as it would on anything that small; it lets go
+    // once they have looked at you.
+    const lim = E.limits; E.limits = null; E.mode = 'locked';
+    const fov0 = E.camera.fov, aimP = V(SF + 0.01, SS + 0.012, MZ), hp = V(), y0 = E.yaw, p0 = E.pitch, cp = E.camera.position;
+    const up = V(SF - 0.02, SS + 0.09, MZ), over = V(SF + 0.3, SS + 0.03, MZ - 0.03), lookP = V(), pl = V();
+    let ck = 0, prevT = 0;
+    // the mantis: posed every frame from the climb clock; their pseudopupils (the dark spots in a mantis's eyes) are wherever
+    // the eye looks straight back at you, so they follow you; feet and hooks tick on the stone
+    on((dt) => {
+      if (mt < 0) return;
+      prevT = mt; mt += dt;
+      lookP.lerpVectors(up, over, smt(2.2, 3.0, mt)).lerp(cp, smt(6.3, 7.3, mt));
+      poseMantis(wm, mt, lookP); wm.head.rotateZ(0.22 * smt(7.8, 8.6, mt));   // and a slow tilt of the head, once they have you
+      const taps = legsMantis(wm, mt, prevT);
+      wm.M.updateMatrixWorld(true);
+      wm.eyes.forEach((e, i) => { wm.head.worldToLocal(pl.copy(cp)).sub(e.position).normalize(); wm.pupils[i].position.copy(e.position).addScaledVector(pl, 0.0027); });
+      if (taps) A.mantisSill(mt < 2 ? 'hook' : 'step', 2.5);
+      if (prevT < 5.55 && mt >= 5.55) A.mantisSill('settle', 2.5);
+    });
+    const look = on((dt) => {
+      ck = Math.min(1, ck + dt / 1.4);
+      if (mt > 2.0) { wm.head.getWorldPosition(hp); aimP.lerp(hp, Math.min(1, dt * 1.6)); }   // the edge, then their head once it shows
+      const d = pl.subVectors(aimP, cp).normalize(), yw = Math.atan2(-d.x, -d.z), e = smt(0, 1, ck);
+      E.yaw = y0 + Math.atan2(Math.sin(yw - y0), Math.cos(yw - y0)) * e; E.pitch = lerp(p0, Math.asin(d.y), e);
+    });
+    mt = 0;
+    tween(3, (k) => { E.camera.fov = lerp(fov0, 14, k); E.camera.updateProjectionMatrix(); });
+    await until(() => mt >= 6.4, 30);
+    note('realmantis');
+    await say('On the sill outside the window, a small green mantis. They turn their head, and look in at you.');
     await say('You are not afraid of them. You are not sure you are afraid of anything.');
+    look();
+    await tween(2.4, (k) => { E.camera.fov = lerp(14, fov0, k); E.camera.updateProjectionMatrix(); });
+    E.limits = lim; E.mode = 'look';
   } else if (kind === 'wardens') {
     await say('3:00. Again.');
     await say('On the far wall, a seam of blue light, closing.');
@@ -517,11 +844,15 @@ export async function ending(kind) {
     // The right hand, by IK (makePlayerBody ikRight): up from the side, palm down onto the covers over the thigh; it grips,
     // drags them off to the right and lets go (they slide on and fall away), then drops out of sight. The eyes follow the
     // hand the whole time and then go down to the shin: one aim point, moved continuously, so the view never jumps.
-    const lim = E.limits; E.limits = null;
+    E.limits = null;
     bed.userData.armR.visible = false;   // the lying body's right arm; the one that reaches is this one
+    // the head is held where it is while this arm works, so the sitting torso (and the arm's shoulder on it) stays put
+    const hq0 = E.camera.quaternion.clone(); headQ = hq0.clone();
     const me = makePlayerBody(), mu = me.userData, hr = mu.handRigR;
     mu.torso.children[0].visible = false; mu.legs.visible = false; mu.armL.visible = false;
-    me.position.copy(E.camera.position); me.rotation.set(0, Math.PI, 0); R.group.add(me);
+    // in the sitting torso's frame, so the arm leaves from its shoulder, and carried with it when the body leans in
+    const toTorso = () => { bu.torso.getWorldPosition(me.position); bu.torso.getWorldQuaternion(me.quaternion); };
+    toTorso(); R.group.add(me);
     mu.relax(0.1); me.updateMatrixWorld(true);
     const toL = (w) => me.worldToLocal(w.clone()), iq = me.quaternion.clone().invert();
     const W0 = toL(mu.handR.getWorldPosition(V())), Q0 = iq.clone().multiply(mu.handR.getWorldQuaternion(new THREE.Quaternion()));
@@ -567,12 +898,14 @@ export async function ending(kind) {
       const e = 1 - (1 - q) * (1 - q);   // the fling: fastest as the hand lets go, then sliding to a stop
       R.blanket.position.x = bx - 0.3 - 0.65 * e; R.blanket.position.y = by - 0.01 - 0.04 * e; R.blanket.rotation.z = -0.1 * e;
       const d = sm(0.05, 0.6, q), g2 = sm(0, 0.2, q);
-      if (q < 0.6) pose(bez(Wd, C2, W0, d, Wt), Qt.slerpQuaternions(Qh, Q0, d), 1 - sm(0.1, 0.6, q), 1 - g2);
-      else if (me.parent) discard(me);   // down by the hip, out of sight (discard frees its bone texture)
       const m = sm(0.1, 1, q);
       E.camera.position.lerpVectors(p1, lean, m); look.lerpVectors(L1, mw, m);
+      headQ.slerpQuaternions(hq0, E.camera.quaternion, sm(0, 0.6, q)); bu.riseTo(E.camera.position, null, headQ);   // the head comes free as the arm drops
+      if (q < 0.6) { toTorso(); pose(bez(Wd, C2, W0, d, Wt), Qt.slerpQuaternions(Qh, Q0, d), 1 - sm(0.1, 0.6, q), 1 - g2); }
+      else if (me.parent) discard(me);   // down by the hip, out of sight (discard frees its bone texture)
     }, (k) => k);
-    aim(); E.limits = lim;
+    headQ = null;
+    aim(); { const rl = bu.riseLimits(E.yaw); E.base.yaw = rl.base.yaw; E.base.pitch = rl.base.pitch; E.limits = rl.limits; }   // the look held to the leaning torso
     await say('You pull back the sheet. On your shin, a small scooped mark that was not there yesterday.'); note('marks');
     await wait(1.5);
   }

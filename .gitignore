@@ -16,6 +16,12 @@ CLAUDE.md
 docs/HANDOFF.md
 docs/TODO.md
 docs/SCENES.md
+docs/scene-expansion-research.md
+docs/NEW_SCENES.md
+docs/NEW_SCENES_RESEARCH.md
+docs/NEW_SCENES_AGENT_RULES.md
+docs/NEW_SCENES_FIELD_LAYOUT.md
+docs/B158_AGENT_RULES.md
 docs/CODE_MAP.md
 docs/CAPTIONS.md
 docs/*AUDIT*.md
@@ -60,3 +66,6 @@ docs/REDDIT_POST.md
 
 # Blender working files: .blend embeds absolute local paths (the export in js/clips/ and anim/grey-rig.json are what the game and tools use)
 anim/*.blend
+
+# Music sketches (MIDI, renders and the script that writes them): not used by the game, kept local
+music/

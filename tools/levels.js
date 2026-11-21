@@ -33,7 +33,11 @@ async function measureCue(name, args = [], { seconds = 14, rate = 48000 } = {}) 
     cur.text.push(l); prev = l;
   }
   parts.push(cur);
-  const sounds = (p) => /\.start\(|A\._(air|body|thump|glints|suck|comb|choir|grains)\(|A\.(tone|noise|toneAt)\(/.test(p.text.join('\n'));
+  // helpers the cue defines in its setup that start a source (const click = (...) => { ... s.start(at) ... }): a layer
+  // that calls one makes sound too
+  const own = []; for (const m of parts[0].text.join('\n').matchAll(/(?:const|,)\s*(\w+)\s*=\s*\([^)]*\)\s*=>\s*\{([^\n]*)/g)) if (/\.start\(/.test(m[2])) own.push(m[1]);
+  const ownRe = own.length ? new RegExp('\\b(' + own.join('|') + ')\\(') : null;
+  const sounds = (p) => !(p === parts[0] && own.length) && /\.start\(|A\._(air|body|thump|glints|suck|comb|choir|grains|fband|fbark|burst|noiseLP)\(|A\.(tone|noise|toneAt|lull|hum)\(/.test(p.text.join('\n')) || (p !== parts[0] && ownRe && ownRe.test(p.text.join('\n')));
   const keep = parts.filter((p) => !sounds(p)), layers = parts.filter(sounds);
   const build = (only) => '\n  ' + head + '\n' + parts.filter((p) => keep.includes(p) || only.includes(p)).map((p) => p.text.join('\n')).join('\n') + '\n  },';
   const db = (x) => (10 * Math.log10(Math.max(x, 1e-12))).toFixed(1);

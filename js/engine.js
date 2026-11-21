@@ -12,6 +12,8 @@ const params = new URLSearchParams(location.search);
 // Player state for one night.
 export const G = {};
 export function resetNight() {
+  G.cued = false;   // the reveal: the cue from the doorway was seen in the remembered room
+  G.wove = false;   // the control room: your own touch drew the chosen thread tight
   Object.assign(G, { fear: 0.2, lucidity: 0.5, trust: 0, path: null, stare: false, toy: false, visited: {}, asked: false, talks: 0 });
 }
 resetNight();
@@ -473,7 +475,8 @@ function frame(ms) {
 
   E.camera.position.y += FOOT.y;   // the step's rise and fall is drawn but never seen by scene code
   watchDetails(dt); lapses(dt);
-  if (!E.noRender) E.renderer.render(E.scene, E.camera);
+  // E.draw: a scene's own full-screen pass (the reveal's memories) draws the frame instead; clearScene removes it
+  if (!E.noRender) { if (E.draw) E.draw(); else E.renderer.render(E.scene, E.camera); }
   E.camera.position.y -= FOOT.y;   // a test harness may step frames without drawing them
   if (staleMats.size && ++staleFrames >= STALE_FRAMES) flushMaterials();
   E.just.clear();
@@ -611,8 +614,12 @@ export function disposeTree(root) {
 }
 export function clearScene() {
   const seen = new Set();
-  for (const c of [...E.scene.children]) if (c !== E.camera) { E.scene.remove(c); collect(c, seen); }
-  for (const c of [...E.camera.children]) { E.camera.remove(c); collect(c, seen); }
+  // E.carry: { objs: [...] } a scene hands to the next one (scene or camera children left in place, once); the next scene
+  // takes it and sets E.carry = null. If it is not taken, the following clear disposes it as usual.
+  const carry = E.carry && !E.carry.passed ? E.carry.objs : [];
+  if (E.carry) { if (E.carry.passed) E.carry = null; else E.carry.passed = true; }
+  for (const c of [...E.scene.children]) if (c !== E.camera && !carry.includes(c)) { E.scene.remove(c); collect(c, seen); }
+  for (const c of [...E.camera.children]) if (!carry.includes(c)) { E.camera.remove(c); collect(c, seen); }
   for (const o of orphans) collect(o, seen);
   orphans.clear();
   for (const r of seen) r.dispose();   // one Set per pass: shared buffers are disposed once
@@ -627,6 +634,7 @@ export function clearScene() {
   E.limits = null; E.mode = 'locked'; E.bounds = null; E.captureLook = null; E.stride = 0; E.surface = 'ship'; E.dread = 0; E.canAct = false;
   E.pull.yaw = E.pull.pitch = 0; E.roll = 0; E.shake = 0; E.unsteady = false; E.noLapse = false; endWarp(); E.details.length = 0; endLapse(); LAPSE.next = 14; WARP.next = 6;
   E.camera.fov = 70; E.camera.updateProjectionMatrix();
+  if (E.draw) { if (E.draw.dispose) E.draw.dispose(); E.draw = null; }   // a scene's own full-screen pass and its render target
   hint(''); prompt('');
 }
 

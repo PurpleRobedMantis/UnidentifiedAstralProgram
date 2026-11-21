@@ -68,9 +68,25 @@ You can walk. A round metal room with four doorways, and the mantis on a dais in
 
 Robert Monroe's Focus 10 and rolling out, and the 1983 US Army Gateway report. Whose body is in the bed stays open, as in Act 2.
 
+### Act 4b: the control room (behind the scenes)
+
+After all four rooms the mantis asks, "Would you like to see more?" (if you have shown no trust at all, trust −2 or less, they say "You are not ready." instead and you wake to the Scepticism ending). Say no and you wake to the Scepticism ending. Say yes and they unfold an arm and lay one long finger in your open hand. A hum rises, the floor trembles, and the round room comes apart around you into a far larger one.
+
+One operation, seen three ways. Tonight a group in a field in the countryside is doing CE5, meditating together and signalling with a green laser to invite contact.
+- **The loom.** A domed hall with a basin of lives below a gallery. A mantis in a robe of shifting silver weaves threads of light with six arms. Four beads each hold one way the group's night can go: they go home, nothing comes, rain, fog. Your view leaves your body and circles them slowly. You can hold one; their head turns all the way round to you, like an owl's. "The living do not touch the weave." With enough trust your touch pulls the chosen thread tight.
+- **The weather.** A tall grey in a high-collared cloak works a relief table of the countryside: a cloud forms in clear air, a lever pushes out a pointed bank of mist (Travis Walton's lever), rain falls on one farm. Their fingers rest on your hand as you press the last pad.
+- **The field.** You lie on a couch under a ring of light and wake inside a maroon-robed mantis at the edge of the field, beside two greys: all three drawn in lines of light. You saw the group arrive and set up. The mantis sees in four dimensions: each person trails where they have been and where they are going, and for a moment the whole scene folds. The laser draws a triangle and three lights answer. The friends freeze. You switch into one of them, paralysed, eyes only: the lights split and dart, fog comes over the hedge in a straight, steered line, and in it stand a mantis and two greys like half-present silver. "It is you." You go back into the mantis once, hold out the gold medallion from your robe, blazing, and through his eyes again he is lifted rigid off the blanket into the sky.
+- **Afterwards.** In the basin he lies on a white table: the man from the next table in the exam room. "Hours ago. Or not yet."
+
+Sources: Steven Greer's CE-5 practice; three lights answering a traced triangle (his group at Gulf Breeze, 1992); rain falling on one small field (his group in Wiltshire, July 1992); Travis Walton's lever; being shown things by a tall mantis (Linda Porter, one of John Mack's cases) and being aware from two points at once (an experiencer's post). The field notes give each.
+
+**The child.** Only if you took the toy: a warm nursery, and the copper-haired child from the classroom and the hall of containers, who does a small, happy dance from side to side, clapping, (a hypnosis account of meeting a hybrid daughter). When the toy touches their hand, three memories come back, tied together by one hummed tune: the hall of containers, where the grey was watching you; the classroom, where the child held your stare, humming under their breath; and a night years ago, with a grey in a black wig humming that tune, "Don't be afraid. I'm like you." (the wig is from an account where a grey in a black bob looked ridiculous and the experiencer was less afraid; the link to children is from David Huggins's accounts). Then: "This child is yours." Reach for them, step back, or say nothing. They keep the toy "till you come back."
+
+Either way, the beings now want you seen higher up: "Tonight you were inside one of us. No one does that and stays only what they were." or "You have a child among us now. Those above us have asked to see the child's parent."
+
 ### Act 5: the mandala (otherworldly journey and theophany)
 
-After all four rooms the mantis asks, "Would you like to see more?" (if you have shown no trust at all, trust −2 or less, they say "You are not ready." instead and you wake to the Scepticism ending). Say no and you wake to the Scepticism ending. Say yes and they unfold an arm and lay one long finger in your open hand.
+The mantis lays one long finger in your open hand.
 
 - The ringing returns and climbs. A crinkling sound.
 - **The waiting room.** A black-and-white checkered palace. Jester faces press out of the walls, sticking out their tongues, turning slowly from frown to grin.
@@ -95,7 +111,7 @@ You wake. What you find depends on the night.
 | Ending | How | What you wake to | Reading it echoes |
 |---|---|---|---|
 | **Missing Time** | Broke free in Act 1 | 4:14, wrong way round in bed, three marks by the thumb, no memory | Hopkins, Jacobs |
-| **Communion** | Lucidity 0.55 or more and trust 2 or more, then said thank you or nothing | Morning (8:08 on the clock), full memory, a mantis on the outside of the window | Mack, Strieber |
+| **Communion** | Lucidity 0.55 or more and trust 2 or more, then said thank you or nothing | Morning (8:08 on the clock), full memory, a small praying mantis climbs onto the sill outside the window and turns to look in | Mack, Strieber |
 | **The Wardens** | Challenged them or tried to pass the mandala | Thrown back. 3:00 again. Was the answer real, or what you already believed? | Turner, the prison-planet community, the 2024 DMT trip report |
 | **Hang Up the Phone** | "Is that all this is?", or thank you / nothing with lucidity kept but trust under 2 | You wake laughing and angry. "You can be whoever and do whatever you want." The clock ticks to 3:01. "I'm coming back later, to check again." | DMT trip report, r/Experiencers and r/DMT, 2024 |
 | **Scepticism** | Lucidity under 0.55 at the council, "No" when the mantis offers more, or no trust shown at all (not offered) | Morning. A calm voice explains sleep paralysis. There is a scoop mark on your shin | Clancy and French, against Hopkins |
@@ -130,7 +146,7 @@ Mouse to look (arrow keys also turn the head); W A S D to walk when you can (Shi
 
 ## Scope
 
-In: the six acts, the endings, four ship rooms, six mechanics (break free, breathe, the stare, the two lessons, the Gateway tuning, look past the jesters), field notes.
+In: the six acts and the control-room act (loom, weather, the field, the child), the endings, four ship rooms, six mechanics (break free, breathe, the stare, the two lessons, the Gateway tuning, look past the jesters), field notes.
 
 Out for the first version: saved games beyond unlocked field notes, voice acting, a second night.
 

@@ -328,7 +328,10 @@ export async function bedroom() {
   // the doorway
   const hum = A.rise(62, 0.05, 5, { type: 'sawtooth' });
   R.openPortal(0); A.portal(2.6);
-  await tween(2.6, (k) => R.openPortal(k));
+  // the light outside dies back as the doorway opens, so the room is lit from the doorway and the window is night again
+  // (left on, it lit the whole room evenly and washed the window out to pale grey)
+  { const gl0 = R.glare.intensity, c0 = R.glass.color.clone(), cN = new THREE.Color(0x26344f);
+    await tween(2.6, (k) => { R.openPortal(k); R.glare.intensity = gl0 * (1 - 0.92 * k); R.glass.color.lerpColors(c0, cN, k); }); }
   note('doorway');
   A.greysIn(2.56, 6);   // laid out on the 2.0 s wait and the walk below (they cross the wall plane 0.56 s into it): change either and change this
   await wait(2.0);      // build 130: 0.8 s before, lengthened so the roar builds longer before they come through
@@ -452,8 +455,19 @@ export async function bedroom() {
     note('struggle');
     E.limits = null; E.shake = 0.02;
     say('A fist lifts off the sheet. Your voice comes back as a croak.'); A.croak();
-    tween(0.8, (k) => me.userData.fistLift(liftFrom + (1 - liftFrom) * k));   // on from wherever the struggle had got it
+    tween(0.8, (k) => me.userData.fistLift(liftFrom + (1 - liftFrom) * k))   // on from wherever the struggle had got it
+      .then(() => wait(1.2)).then(() => { const u = me.userData, a0 = u.armR.rotation.x, f0 = u.foreR.rotation.x;   // sitting up, the fist comes down to chest height, still clenched (fully raised it filled the right of the view)
+        return tween(1.4, (k) => { u.armR.rotation.x = a0 - 0.45 * k; u.foreR.rotation.x = f0 - 0.2 * k; }); });
     moveView(1.1, { pos: V(0, 1.2, -1.15), pitch: 0, yaw: Math.PI }); A.rustle(1.0, 1.3);   // bolt upright: the covers drag
+    // the body sits up with the view (its eyes stay at the camera, so it is never seen from outside, headless), and the
+    // look is held to what a sitting body can see without turning into its own open collar
+    // (pivoting a little behind the hips, so it sits up against the pillows rather than leaning far back)
+    // The lying view sits 12 cm over the lying body's eyes, so that gap closes over the bolt instead of in one frame.
+    { const mu = me.userData, hip = V(0, 0.56, -1.0), off = me.localToWorld(V(0, 0, 0)).sub(E.camera.position), tg = V();
+      const hip0 = me.localToWorld(mu.legs.position.clone()), hw = V();
+      let tb = 0; on((dt) => { tb += dt; const w = Math.min(1, tb / 1.1), s = w * w * (3 - 2 * w); mu.riseTo(tg.copy(E.camera.position).addScaledVector(off, 1 - s), hw.lerpVectors(hip0, hip, s), E.camera.quaternion, s); });
+      mu.riseTo(V(0, 1.2, -1.15), hip); const rl = mu.riseLimits(Math.PI); mu.riseTo(tg.copy(E.camera.position).add(off), hip0);
+      E.base.yaw = rl.base.yaw; E.base.pitch = rl.base.pitch; E.limits = rl.limits; }
     // How they take it (build 123; they used to slide back 2 cm a frame, a sudden glide away): in the accounts the beings
     // are not frightened off. They stop dead, a startled stillness, a look passes between them, and then they carry on,
     // calm and businesslike, and come in closer to put you under again (the stare, a touch, an instrument). So: they freeze
@@ -615,6 +629,9 @@ export async function bedroom() {
   discard(me);
   R.body.visible = true; R.body.userData.head.visible = false;
   wait(0.9).then(() => { R.body.userData.head.visible = true; });
+  // the room's light lifts as you rise (the doorway's glow filling the room), so the ceiling at your nose reads grain by grain
+  // (the doorway's light, held near the door while you lay there, reaches out into the room: its point light moves in)
+  { const a0 = R.amb.intensity, pz = R.portalLight.position.z; tween(5, (k) => { R.amb.intensity = a0 * (1 + 0.6 * k); R.portalLight.position.z = lerp(pz, 2.8, k); }); }
   await moveView(5, { pos: V(0, 2.4, -1.0), pitch: 1.45, yaw: Math.PI });
   note('ceiling');
   await say('The ceiling, inches from your nose. Every grain of it.');

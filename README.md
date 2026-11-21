@@ -2,7 +2,7 @@
 
 **Play it in your browser: https://purplerobedmantis.itch.io/unidentified-astral-program** (public beta)
 
-A first-person 3D browser game, about 15 minutes (in current iteration), that plays through one night of contact as people who call themselves "experiencers" describe it: waking paralysed at 3 a.m., figures in the bedroom, the white room, the robed mantis, the classroom, the checkered hall of jesters and the mandala. Every scene, line and mechanic is built from documented accounts: the abduction literature (Hopkins, Jacobs, Mack, Bullard and others), sleep-paralysis and out-of-body research, published DMT studies, Robert Monroe's out-of-body work and the declassified US Army Gateway report, and first-person posts on Reddit. The in-game field notes say where each piece comes from. The game has no combat; your body is the controller, and what you remember depends on whether you fight.
+A first-person 3D browser game, about 25 minutes (in current iteration), that plays through one night of contact as people who call themselves "experiencers" describe it: waking paralysed at 3 a.m., figures in the bedroom, the white room, the robed mantis, the classroom, a control room where the beings shape the night of a group calling to them from a field, the checkered hall of jesters and the mandala. Every scene, line and mechanic is built from documented accounts: the abduction literature (Hopkins, Jacobs, Mack, Bullard and others), sleep-paralysis and out-of-body research, published DMT studies, Robert Monroe's out-of-body work and the declassified US Army Gateway report, and first-person posts on Reddit. The in-game field notes say where each piece comes from. The game has no combat; your body is the controller, and what you remember depends on whether you fight.
 
 ## Content warning
 
@@ -10,6 +10,7 @@ A first-person 3D browser game, about 15 minutes (in current iteration), that pl
 - Sleep paralysis: being awake and unable to move, with figures in the room.
 - Abduction and being taken against your will.
 - Medical-examination imagery (no injury or sexual content is shown).
+- One remembered scene implies a sexual encounter with a being. Nothing is shown.
 - Loud, rising tones. Start with the volume low.
 - Strong language: the jesters swear at you.
 - Existential themes: death, memory loss, whether you can trust what you are shown.
@@ -92,6 +93,9 @@ Which ending you reach depends on whether you fight, whether you hold the stare,
 - `js/scenes/night.js`: bedroom, passage, white room
 - `js/scenes/ship.js`: crossroads and the four rooms
 - `js/scenes/beyond.js`: jester hall, mandala, council, endings
+- `js/scenes/control.js`: the control room (the loom, the weather table, the link) and its aftermath
+- `js/scenes/field.js`: the field at night, seen through a mantis's eyes and a paralysed man's
+- `js/scenes/reveal.js`: the nursery and the memories (only if you took the toy)
 - `vendor/three/`: a vendored copy of three.js r160 (`three.module.js`) and its licence
 - `img/`: three public-domain NASA maps of the Earth and Moon
 - `server.js`, `start.bat`: a dependency-free static file server for local play, and a Windows launcher for it
@@ -101,7 +105,7 @@ Which ending you reach depends on whether you fight, whether you hold the stare,
 
 ## Developer shortcuts
 
-Press F2 on any screen, or open the game with `?dev=1` in the URL, to switch on developer mode (F2 is remembered in this browser until you choose "Switch off and reload" in the menu, or a new version of the game is installed). Then press `` ` `` to open the developer menu, pick a speed or jump straight to any scene or ending; `[` and `]` halve and double the speed, `\` resets it. The URL shortcuts below also need `dev=1`. `?dev=1&fast=4` speeds up time; `?dev=1&scene=hub&seen=3` jumps to the crossroads with three rooms done; `?scene=room&room=class` (or `window`, `containers`, `viewing`) opens one room; `?scene=end:communion` plays an ending. `path=calm` and `lucid=0.8` preset the player state.
+Press F2 on any screen, or open the game with `?dev=1` in the URL, to switch on developer mode (F2 is remembered in this browser until you choose "Switch off and reload" in the menu, or a new version of the game is installed). Then press `` ` `` to open the developer menu, pick a speed or jump straight to any scene or ending; `[` and `]` halve and double the speed, `\` resets it. The URL shortcuts below also need `dev=1`. `?dev=1&fast=4` speeds up time; `?dev=1&scene=hub&seen=3` jumps to the crossroads with three rooms done; `?scene=room&room=class` (or `window`, `containers`, `viewing`) opens one room; `?scene=end:communion` plays an ending; `?scene=control`, `field`, `aftermath` and `reveal&toy=1` open the control-room act. `path=calm` and `lucid=0.8` preset the player state.
 
 ## Technology and credits
 
